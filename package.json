@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.80",
+    "@ai-sdk/openai": "^3.0.68",
     "@mysten-incubation/memwal": "^0.0.7",
     "ai": "^6.0.198",
     "axios": "^1.17.0",
