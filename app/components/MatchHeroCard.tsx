@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import type { Match } from "../lib/matches"
+import { getTLA } from "../lib/matches"
+import FlagImg from "./FlagImg"
 
 interface MatchHeroCardProps {
   match: Match
@@ -30,16 +32,16 @@ function Countdown({ targetDate }: { targetDate: string }) {
 
   return (
     <span
-      className="inline-flex items-center gap-1.5 text-[11px] font-medium"
+      className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider backdrop-blur-md"
       style={{
-        background: "#FAECE7",
-        color: "#993C1D",
-        border: "0.5px solid #F0997B",
-        padding: "3px 10px",
+        background: "rgba(59, 130, 246, 0.12)",
+        color: "#93C5FD",
+        border: "0.5px solid rgba(59, 130, 246, 0.28)",
+        padding: "4px 12px",
         borderRadius: 99,
       }}
     >
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#D85A30", display: "inline-block" }} />
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#3B82F6", display: "inline-block" }} className="animate-pulse" />
       {timeLeft}
     </span>
   )
@@ -78,23 +80,21 @@ export default function MatchHeroCard({
 
   return (
     <div
-      className="rounded-xl overflow-hidden"
+      className="rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-[#3B82F6]/5 backdrop-blur-xl border border-white/10"
       style={{
-        background: "var(--color-background-primary)",
-        border: "0.5px solid var(--color-border-tertiary)",
+        background: "rgba(255, 255, 255, 0.03)",
       }}
     >
       {/* Header */}
       <div
-        className="flex items-center justify-between px-5 py-3"
+        className="flex items-center justify-between px-5 py-3 border-b border-white/5"
         style={{
-          borderBottom: "0.5px solid var(--color-border-tertiary)",
-          background: "var(--color-background-secondary)",
+          background: "rgba(255, 255, 255, 0.02)",
         }}
       >
         <div className="flex items-center gap-2">
-          <i className="ti ti-calendar-event" style={{ fontSize: 12, color: "var(--color-text-tertiary)" }} />
-          <span className="text-[12px]" style={{ color: "var(--color-text-secondary)" }}>
+          <i className="ti ti-calendar-event text-[12px] text-neutral-400" />
+          <span className="text-[12px] text-neutral-400">
             {match.date} · {match.time} · {match.venue}
           </span>
         </div>
@@ -102,30 +102,33 @@ export default function MatchHeroCard({
       </div>
 
       {/* Body */}
-      <div className="p-5 flex flex-col gap-4">
+      <div className="p-5 flex flex-col gap-5">
         {/* Teams row */}
-        <div className="flex items-center gap-4">
-          {teams.map(({ team, flag }, i) => (
-            <div key={team} className="flex items-center gap-2 flex-1">
-              <span style={{ fontSize: 32 }}>{flag}</span>
-              <div>
-                <div className="text-[15px] font-medium" style={{ color: "var(--color-text-primary)" }}>
-                  {team}
-                </div>
-                <div className="text-[11px]" style={{ color: "var(--color-text-tertiary)" }}>
-                  {match.group}
-                </div>
+        <div className="flex items-center gap-2">
+          {/* Home */}
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <FlagImg team={match.homeTeam} height={32} />
+            <div className="min-w-0">
+              <div className="text-[18px] font-bold text-white tracking-widest leading-tight">
+                {getTLA(match.homeTeam)}
               </div>
-              {i === 0 && (
-                <span
-                  className="mx-auto text-[13px] font-medium"
-                  style={{ color: "var(--color-text-tertiary)" }}
-                >
-                  VS
-                </span>
-              )}
+              <div className="text-[11px] text-neutral-400 truncate">{match.homeTeam}</div>
             </div>
-          ))}
+          </div>
+          {/* VS */}
+          <div className="flex-shrink-0 px-2">
+            <span className="text-[11px] font-bold text-neutral-500 tracking-widest select-none">VS</span>
+          </div>
+          {/* Away */}
+          <div className="flex items-center gap-2.5 flex-1 min-w-0 justify-end">
+            <div className="min-w-0 text-right">
+              <div className="text-[18px] font-bold text-white tracking-widest leading-tight">
+                {getTLA(match.awayTeam)}
+              </div>
+              <div className="text-[11px] text-neutral-400 truncate">{match.awayTeam}</div>
+            </div>
+            <FlagImg team={match.awayTeam} height={32} />
+          </div>
         </div>
 
         {/* Pick buttons */}
@@ -136,15 +139,24 @@ export default function MatchHeroCard({
               <button
                 key={team}
                 onClick={() => setPick(team)}
-                className="flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] font-medium transition-all"
+                className="flex flex-col items-center justify-center gap-1 py-3.5 rounded-xl transition-all duration-200 active:scale-95 hover:bg-white/[0.06]"
                 style={{
-                  background: selected ? "#FAECE7" : "var(--color-background-secondary)",
-                  color: selected ? "#993C1D" : "var(--color-text-primary)",
-                  border: selected ? "1.5px solid #D85A30" : "0.5px solid var(--color-border-tertiary)",
+                  background: selected ? "rgba(59, 130, 246, 0.16)" : "rgba(255, 255, 255, 0.03)",
+                  border: selected ? "1.5px solid #3B82F6" : "0.5px solid rgba(255, 255, 255, 0.08)",
                 }}
               >
-                <span>{flag}</span>
-                {team}
+                <span
+                  className="text-[16px] font-bold tracking-widest leading-tight"
+                  style={{ color: selected ? "#93C5FD" : "rgba(255, 255, 255, 0.9)" }}
+                >
+                  {getTLA(team)}
+                </span>
+                <span
+                  className="text-[12px] leading-tight"
+                  style={{ color: selected ? "#93C5FD" : "rgba(255, 255, 255, 0.5)" }}
+                >
+                  {team}
+                </span>
               </button>
             )
           })}
@@ -153,11 +165,11 @@ export default function MatchHeroCard({
         {/* Draw button */}
         <button
           onClick={() => setPick("Draw")}
-          className="w-full py-2.5 rounded-xl text-[13px] font-medium transition-all"
+          className="w-full py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 active:scale-95 hover:bg-white/[0.06]"
           style={{
-            background: pick === "Draw" ? "#FAECE7" : "var(--color-background-secondary)",
-            color: pick === "Draw" ? "#993C1D" : "var(--color-text-secondary)",
-            border: pick === "Draw" ? "1.5px solid #D85A30" : "0.5px solid var(--color-border-tertiary)",
+            background: pick === "Draw" ? "rgba(59, 130, 246, 0.16)" : "rgba(255, 255, 255, 0.03)",
+            color: pick === "Draw" ? "#93C5FD" : "rgba(255, 255, 255, 0.5)",
+            border: pick === "Draw" ? "1.5px solid #3B82F6" : "0.5px solid rgba(255, 255, 255, 0.08)",
           }}
         >
           Draw
@@ -166,8 +178,7 @@ export default function MatchHeroCard({
         {/* Confidence */}
         <div>
           <div
-            className="text-[11px] font-medium uppercase tracking-wide mb-2"
-            style={{ color: "var(--color-text-tertiary)" }}
+            className="text-[11px] font-semibold uppercase tracking-wider mb-2.5 text-neutral-400"
           >
             Confidence
           </div>
@@ -178,13 +189,13 @@ export default function MatchHeroCard({
                 <button
                   key={value}
                   onClick={() => setConfidence(value)}
-                  className="text-[13px] font-medium transition-all"
+                  className="text-[12px] font-medium transition-all duration-200 active:scale-95 hover:bg-white/[0.06]"
                   style={{
                     padding: "6px 14px",
                     borderRadius: 99,
-                    background: active ? "#FAECE7" : "var(--color-background-secondary)",
-                    color: active ? "#D85A30" : "var(--color-text-secondary)",
-                    border: active ? "0.5px solid #D85A30" : "0.5px solid var(--color-border-tertiary)",
+                    background: active ? "rgba(59, 130, 246, 0.16)" : "rgba(255, 255, 255, 0.03)",
+                    color: active ? "#93C5FD" : "rgba(255, 255, 255, 0.6)",
+                    border: active ? "0.5px solid #3B82F6" : "0.5px solid rgba(255, 255, 255, 0.08)",
                   }}
                 >
                   {label}
@@ -194,13 +205,13 @@ export default function MatchHeroCard({
           </div>
         </div>
 
-        {/* Submit */}
+        {/* Submit button */}
         <button
           onClick={handleSubmit}
           disabled={!pick || isSubmitting}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-full text-white text-[14px] font-medium"
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-full text-white text-[14px] font-medium transition-all duration-300 active:scale-[0.98] hover:shadow-lg hover:shadow-blue-500/20"
           style={{
-            background: "#D85A30",
+            background: "#3B82F6",
             opacity: !pick ? 0.45 : 1,
             cursor: !pick ? "not-allowed" : "pointer",
           }}

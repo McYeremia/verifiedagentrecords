@@ -5,28 +5,27 @@ interface StatCardProps {
 }
 
 const valueColors = {
-  neutral: "var(--color-text-primary)",
-  correct: "#1D9E75",
-  wrong: "#D85A30",
+  neutral: "#FFFFFF",
+  correct: "#34D399",
+  wrong: "#EF4444",
 }
 
 export default function StatCard({ value, label, variant = "neutral" }: StatCardProps) {
   return (
     <div
-      className="rounded-lg text-center"
+      className="rounded-2xl text-center transition-all duration-300 hover:scale-[1.04] hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-[#3B82F6]/3 cursor-default border border-white/10 backdrop-blur-xl"
       style={{
         padding: "1rem",
-        background: "var(--color-background-primary)",
-        border: "0.5px solid var(--color-border-tertiary)",
+        background: "rgba(255, 255, 255, 0.03)",
       }}
     >
       <div
-        className="text-[22px] font-medium"
+        className="text-[20px] font-bold"
         style={{ color: valueColors[variant] }}
       >
         {value}
       </div>
-      <div className="text-[11px] mt-1" style={{ color: "var(--color-text-secondary)" }}>
+      <div className="text-[11px] mt-1 text-neutral-400 font-semibold uppercase tracking-wider select-none">
         {label}
       </div>
     </div>

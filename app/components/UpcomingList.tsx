@@ -1,5 +1,6 @@
 import Link from "next/link"
-import { getUpcomingMatches } from "../lib/matches"
+import { getUpcomingMatches, getTLA } from "../lib/matches"
+import FlagImg from "./FlagImg"
 
 interface UpcomingListProps {
   skipFirst?: boolean
@@ -14,49 +15,54 @@ export default function UpcomingList({ skipFirst = true, limit = 3 }: UpcomingLi
 
   return (
     <div
-      className="rounded-xl overflow-hidden"
+      className="rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-[#3B82F6]/3 backdrop-blur-xl border border-white/10"
       style={{
-        background: "var(--color-background-primary)",
-        border: "0.5px solid var(--color-border-tertiary)",
+        background: "rgba(255, 255, 255, 0.03)",
       }}
     >
+      {/* Header */}
       <div
-        className="px-4 py-2.5 flex items-center gap-1.5"
-        style={{ borderBottom: "0.5px solid var(--color-border-tertiary)", background: "var(--color-background-secondary)" }}
+        className="px-4 py-3.5 flex items-center gap-1.5 border-b border-white/5"
+        style={{ background: "rgba(255, 255, 255, 0.02)" }}
       >
-        <i className="ti ti-calendar-event" style={{ fontSize: 11, color: "var(--color-text-tertiary)" }} />
-        <span className="text-[11px] font-medium uppercase tracking-wide" style={{ color: "var(--color-text-tertiary)" }}>
+        <i className="ti ti-calendar-event text-[11px] text-neutral-400" />
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
           Upcoming matches
         </span>
       </div>
+
+      {/* Items */}
       {upcoming.map((match, i) => (
         <div
           key={match.id}
-          className="flex items-center justify-between px-4 py-3"
+          className="flex items-center justify-between px-5 py-3.5 transition-colors duration-200 hover:bg-white/[0.05]"
           style={{
-            borderBottom: i < upcoming.length - 1 ? "0.5px solid var(--color-border-tertiary)" : undefined,
+            borderBottom: i < upcoming.length - 1 ? "0.5px solid rgba(255, 255, 255, 0.05)" : undefined,
           }}
         >
-          <div className="flex items-center gap-2 min-w-0">
-            <span>{match.homeFlag}</span>
-            <span
-              className="text-[13px] font-medium truncate"
-              style={{ color: "var(--color-text-primary)" }}
-            >
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <FlagImg team={match.homeTeam} height={16} />
+              <span className="text-[12px] font-bold text-white tracking-wide">{getTLA(match.homeTeam)}</span>
+              <span className="text-[10px] text-neutral-500">vs</span>
+              <span className="text-[12px] font-bold text-white tracking-wide">{getTLA(match.awayTeam)}</span>
+              <FlagImg team={match.awayTeam} height={16} />
+            </div>
+            <div className="text-[10px] text-neutral-500 truncate">
               {match.homeTeam} vs {match.awayTeam}
-            </span>
-            <span>{match.awayFlag}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <span className="text-[12px] hidden sm:block" style={{ color: "var(--color-text-tertiary)" }}>
+          <div className="flex items-center gap-3.5 flex-shrink-0">
+            <span className="text-[12px] hidden sm:block text-neutral-400">
               {match.date}
             </span>
             <Link
               href={`/predict?match=${match.id}`}
-              className="text-[12px] font-medium"
-              style={{ color: "#D85A30" }}
+              className="text-[12px] font-semibold transition-all duration-200 hover:translate-x-1 flex items-center gap-0.5"
+              style={{ color: "#3B82F6" }}
             >
-              Predict →
+              Predict
+              <i className="ti ti-chevron-right text-[10px]" />
             </Link>
           </div>
         </div>

@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 @theme {
-  --color-coral-50: #FAECE7;
-  --color-coral-400: #D85A30;
-  --color-coral-700: #993C1D;
-  --color-coral-border: #F0997B;
+  --color-brand-50: #EFF6FF;
+  --color-brand-400: #3B82F6;
+  --color-brand-700: #1D4ED8;
+  --color-brand-border: #93C5FD;
   --color-correct: #1D9E75;
   --color-correct-bg: #E1F5EE;
   --color-correct-light: #EAF3DE;
@@ -22,6 +22,16 @@
   --border-radius-md: 8px;
 }
 
+/* Dark theme scope — applied via className="dark" on page wrapper */
+.dark {
+  --color-background-primary: #0e1c32;
+  --color-background-secondary: #081525;
+  --color-border-tertiary: rgba(255, 255, 255, 0.07);
+  --color-text-primary: #e2e8f0;
+  --color-text-secondary: #8898aa;
+  --color-text-tertiary: #64748b;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --color-background-primary: #111111;
@@ -37,4 +47,110 @@ body {
   background: var(--color-background-primary);
   color: var(--color-text-primary);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  overflow-x: hidden;
 }
+
+/* Custom Grid Background and Visual Enhancements */
+.bg-grid-pattern {
+  background-image: radial-gradient(var(--color-border-tertiary) 1.2px, transparent 1.2px);
+  background-size: 24px 24px;
+}
+
+/* Modern Gradient Text selection styling */
+::selection {
+  background-color: var(--color-coral-50);
+  color: var(--color-coral-700);
+}
+
+@media (prefers-color-scheme: dark) {
+  ::selection {
+    background-color: var(--color-coral-700);
+    color: var(--color-coral-50);
+  }
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(4deg);
+  }
+}
+
+@keyframes slow-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.15;
+    filter: blur(120px) scale(1);
+  }
+  50% {
+    opacity: 0.25;
+    filter: blur(140px) scale(1.08);
+  }
+}
+
+.animate-fade-in-up {
+  opacity: 0;
+  animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-slow-spin {
+  animation: slow-spin 20s linear infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 6s ease-in-out infinite;
+}
+
+@keyframes waveShift {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(40px, -25px) scale(1.05); }
+  66% { transform: translate(-25px, 20px) scale(0.97); }
+}
+
+.animate-wave-shift {
+  animation: waveShift 14s ease-in-out infinite;
+}
+
+/* Staggered Delay Utilities */
+.delay-100 {
+  animation-delay: 100ms;
+}
+.delay-200 {
+  animation-delay: 200ms;
+}
+.delay-300 {
+  animation-delay: 300ms;
+}
+.delay-400 {
+  animation-delay: 400ms;
+}
+.delay-500 {
+  animation-delay: 500ms;
+}
+
