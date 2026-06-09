@@ -137,6 +137,21 @@ body {
   animation: waveShift 14s ease-in-out infinite;
 }
 
+@keyframes ticker {
+  0%   { transform: translateX(0) }
+  100% { transform: translateX(-50%) }
+}
+
+.animate-ticker {
+  display: flex;
+  animation: ticker 30s linear infinite;
+  width: max-content;
+}
+
+.animate-ticker:hover {
+  animation-play-state: paused;
+}
+
 /* Staggered Delay Utilities */
 .delay-100 {
   animation-delay: 100ms;

@@ -6,15 +6,52 @@ import { useCurrentAccount, ConnectButton } from "@mysten/dapp-kit"
 import Link from "next/link"
 import Navbar from "../components/Navbar"
 import RoastCard from "../components/RoastCard"
-import HistoryItem from "../components/HistoryItem"
 
 function truncateAddress(addr: string) {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
 }
 
-function parseHistoryMemories(memories: string[]) {
-  const resultMap: Record<string, { isCorrect: boolean; actualWinner: string; score: string }> = {}
+interface RoastSnapshot {
+  roast: string
+  trigger: string
+  predictionCount: number
+  timestamp: string
+}
 
+// ─── Timeline item types ───────────────────────────────────────────────────
+
+type PredictionItem = {
+  kind: "prediction"
+  matchName: string
+  predictedWinner: string
+  confidence: string
+  status: "correct" | "wrong" | "pending"
+  actualResult?: string
+  timestamp: string
+}
+
+type SnapshotItem = {
+  kind: "snapshot"
+  roast: string
+  trigger: string
+  predictionCount: number
+  timestamp: string
+}
+
+type ChampionItem = {
+  kind: "champion"
+  team: string
+  status: "locked" | "correct" | "wrong"
+  actualWinner?: string
+  timestamp: string
+}
+
+type TimelineItem = PredictionItem | SnapshotItem | ChampionItem
+
+// ─── Parsers ───────────────────────────────────────────────────────────────
+
+function buildTimeline(memories: string[], snapshots: RoastSnapshot[]): TimelineItem[] {
+  const resultMap: Record<string, { isCorrect: boolean; actualWinner: string; score: string }> = {}
   for (const text of memories) {
     if (!text.startsWith("[RESULT]")) continue
     const midM = text.match(/Match ([\w_]+)/)
@@ -29,171 +66,479 @@ function parseHistoryMemories(memories: string[]) {
     }
   }
 
-  return memories
+  const predItems: PredictionItem[] = memories
     .filter(t => t.startsWith("[PREDICTION]"))
     .map(text => {
-      const midM = text.match(/matchId: ([\w_]+)/)
+      const midM   = text.match(/matchId: ([\w_]+)/)
       const winnerM = text.match(/predicted (.+?) to win/)
-      const teamsM = text.match(/to win (.+?) \(matchId/)
-      const confM = text.match(/Confidence: (\w+)/)
+      const teamsM  = text.match(/to win (.+?) \(matchId/)
+      const confM   = text.match(/Confidence: (\w+)/)
+      const tsM     = text.match(/Timestamp: (.+)$/)
       if (!midM || !winnerM) return null
       const matchId = midM[1]
-      const result = resultMap[matchId]
+      const result  = resultMap[matchId]
       return {
+        kind: "prediction" as const,
         matchName: teamsM?.[1] ?? matchId,
         predictedWinner: winnerM[1],
         confidence: confM?.[1] ?? "medium",
         status: (result ? (result.isCorrect ? "correct" : "wrong") : "pending") as "correct" | "wrong" | "pending",
         actualResult: result ? `${result.actualWinner} won ${result.score}` : undefined,
+        timestamp: tsM?.[1]?.trim() ?? "",
       }
     })
-    .filter(Boolean) as Array<{
-      matchName: string
-      predictedWinner: string
-      confidence: string
-      status: "correct" | "wrong" | "pending"
-      actualResult?: string
-    }>
+    .filter(Boolean) as PredictionItem[]
+
+  const snapItems: SnapshotItem[] = snapshots.map(s => ({
+    kind: "snapshot" as const,
+    roast: s.roast,
+    trigger: s.trigger,
+    predictionCount: s.predictionCount,
+    timestamp: s.timestamp,
+  }))
+
+  // Parse champion pick — one per user
+  const championResultText = memories.find(t => t.startsWith("[CHAMPION_RESULT]"))
+  const championPickText   = memories.find(t => t.startsWith("[CHAMPION_PICK]"))
+  const championItems: ChampionItem[] = []
+  if (championPickText) {
+    const teamM   = championPickText.match(/predicts (.+?) will win/)
+    const tsM     = championPickText.match(/Locked in: (.+)$/)
+    if (teamM && tsM) {
+      let status: ChampionItem["status"] = "locked"
+      let actualWinner: string | undefined
+      if (championResultText) {
+        const outcomeM = championResultText.match(/(CORRECT|WRONG)/)
+        const actualM  = championResultText.match(/Actual winner: (.+?)\. Timestamp/)
+        status = outcomeM?.[1] === "CORRECT" ? "correct" : "wrong"
+        actualWinner = actualM?.[1]
+      }
+      championItems.push({
+        kind: "champion",
+        team: teamM[1],
+        status,
+        actualWinner,
+        timestamp: tsM[1].trim(),
+      })
+    }
+  }
+
+  return [...predItems, ...snapItems, ...championItems].sort((a, b) => b.timestamp.localeCompare(a.timestamp))
 }
 
+function computeStats(memories: string[]) {
+  const resultMap: Record<string, boolean> = {}
+  for (const text of memories) {
+    if (!text.startsWith("[RESULT]")) continue
+    const midM    = text.match(/Match ([\w_]+)/)
+    const correctM = text.match(/(CORRECT|WRONG)/)
+    if (midM && correctM) resultMap[midM[1]] = correctM[1] === "CORRECT"
+  }
+  const predIds  = memories.filter(t => t.startsWith("[PREDICTION]")).map(t => t.match(/matchId: ([\w_]+)/)?.[1]).filter(Boolean) as string[]
+  const resolved = predIds.filter(id => id in resultMap)
+  const correct  = resolved.filter(id => resultMap[id]).length
+  return {
+    total:    predIds.length,
+    correct,
+    accuracy: resolved.length > 0 ? Math.round((correct / resolved.length) * 100) : 0,
+  }
+}
+
+// ─── Styled helpers ────────────────────────────────────────────────────────
+
+const CONFIDENCE_COLORS: Record<string, string> = {
+  low: "#94A3B8",
+  medium: "#93C5FD",
+  high: "#34D399",
+  "all-in": "#FBBF24",
+}
+
+const STATUS_STYLE: Record<string, { color: string; bg: string; icon: string; label: string }> = {
+  correct: { color: "#1D9E75", bg: "rgba(29,158,117,0.12)", icon: "ti-check",        label: "Correct" },
+  wrong:   { color: "#EF4444", bg: "rgba(239,68,68,0.12)",  icon: "ti-x",            label: "Wrong"   },
+  pending: { color: "#94A3B8", bg: "rgba(148,163,184,0.10)", icon: "ti-clock-hour-4", label: "Pending" },
+}
+
+const TRIGGER_META: Record<string, { label: string; color: string; icon: string }> = {
+  PREDICTION: { label: "VAR snapshot",      color: "#3B82F6", icon: "ti-quote"    },
+  RESULT:     { label: "After result",      color: "#EAB308", icon: "ti-trophy"   },
+  PATTERN:    { label: "Pattern detected",  color: "#EF4444", icon: "ti-flame"    },
+}
+
+// ─── Unified Timeline ──────────────────────────────────────────────────────
+
+function UnifiedTimeline({ items, loading }: { items: TimelineItem[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-8 justify-center">
+        <i className="ti ti-loader animate-slow-spin text-[14px]" style={{ color: "rgba(255,255,255,0.20)" }} />
+        <span className="text-[12px]" style={{ color: "rgba(255,255,255,0.25)" }}>
+          Loading VAR records...
+        </span>
+      </div>
+    )
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="py-10 text-center">
+        <p className="text-[13px]" style={{ color: "rgba(255,255,255,0.25)" }}>
+          No history yet.{" "}
+          <Link href="/predict" className="underline" style={{ color: "#3B82F6" }}>
+            Start predicting →
+          </Link>
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative">
+      {/* Vertical connector line */}
+      <div
+        className="absolute left-[11px] top-2 bottom-2 w-px"
+        style={{ background: "rgba(255,255,255,0.06)" }}
+      />
+
+      <div className="flex flex-col gap-0">
+        {items.map((item, i) => {
+          const isLast = i === 0
+          const ts = item.timestamp ? new Date(item.timestamp) : null
+          const dateStr = ts ? ts.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""
+          const timeStr = ts ? ts.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }) : ""
+
+          if (item.kind === "prediction") {
+            const st = STATUS_STYLE[item.status]
+            const confColor = CONFIDENCE_COLORS[item.confidence] ?? "#93C5FD"
+            return (
+              <div key={i} className="flex gap-3.5 pb-4 relative">
+                {/* Dot */}
+                <div
+                  className="w-[23px] h-[23px] rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 relative z-10"
+                  style={{
+                    background: `${st.color}18`,
+                    border: `1px solid ${st.color}40`,
+                  }}
+                >
+                  <i className={`ti ${st.icon}`} style={{ fontSize: 10, color: st.color }} />
+                </div>
+
+                {/* Card */}
+                <div className="flex-1 min-w-0">
+                  {/* Meta */}
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.30)" }}>
+                      Prediction
+                    </span>
+                    {dateStr && (
+                      <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.20)" }}>
+                        {dateStr} · {timeStr}
+                      </span>
+                    )}
+                  </div>
+                  {/* Body */}
+                  <div
+                    className="rounded-xl p-3.5 flex items-start justify-between gap-3"
+                    style={{
+                      background: "rgba(255,255,255,0.02)",
+                      border: `0.5px solid rgba(255,255,255,0.06)`,
+                      borderLeft: `2px solid ${st.color}`,
+                    }}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[12px] text-neutral-400 truncate">{item.matchName}</div>
+                      <div className="text-[14px] font-semibold text-white mt-0.5">
+                        {item.predictedWinner}
+                      </div>
+                      {item.actualResult && (
+                        <div className="text-[11px] mt-1" style={{ color: "rgba(255,255,255,0.30)" }}>
+                          {item.actualResult}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                      <span
+                        className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full"
+                        style={{ background: st.bg, color: st.color }}
+                      >
+                        <i className={`ti ${st.icon}`} style={{ fontSize: 9 }} />
+                        {st.label}
+                      </span>
+                      <span
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                        style={{ background: `${confColor}15`, color: confColor }}
+                      >
+                        {item.confidence}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          }
+
+          // Champion item
+          if (item.kind === "champion") {
+            const champColor = item.status === "correct" ? "#1D9E75" : item.status === "wrong" ? "#EF4444" : "#FBBF24"
+            const champIcon  = item.status === "correct" ? "ti-check" : item.status === "wrong" ? "ti-x" : "ti-lock"
+            const champLabel = item.status === "correct" ? "Correct" : item.status === "wrong" ? "Wrong" : "Locked in"
+            return (
+              <div key={i} className="flex gap-3.5 pb-4 relative">
+                <div
+                  className="w-[23px] h-[23px] rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 relative z-10"
+                  style={{
+                    background: isLast ? champColor : `${champColor}20`,
+                    border: `1px solid ${isLast ? champColor : `${champColor}45`}`,
+                    boxShadow: isLast ? `0 0 10px ${champColor}55` : "none",
+                  }}
+                >
+                  <i className={`ti ${champIcon}`} style={{ fontSize: 10, color: isLast ? "white" : champColor }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span
+                      className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                      style={{ background: `${champColor}15`, color: champColor, border: `0.5px solid ${champColor}30` }}
+                    >
+                      <i className="ti ti-trophy mr-1" style={{ fontSize: 9 }} />
+                      WC 2026 Champion Pick
+                    </span>
+                    {dateStr && (
+                      <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.20)" }}>
+                        {dateStr} · {timeStr}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className="rounded-xl p-3.5 flex items-start justify-between gap-3"
+                    style={{
+                      background: isLast ? `${champColor}06` : "rgba(255,255,255,0.02)",
+                      border: `0.5px solid ${isLast ? `${champColor}20` : "rgba(255,255,255,0.06)"}`,
+                      borderLeft: `2px solid ${champColor}`,
+                    }}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[11px] text-neutral-400">World Cup 2026 winner</div>
+                      <div className="text-[15px] font-bold text-white mt-0.5">{item.team}</div>
+                      {item.actualWinner && item.status !== "locked" && (
+                        <div className="text-[11px] mt-1" style={{ color: "rgba(255,255,255,0.30)" }}>
+                          Actual winner: {item.actualWinner}
+                        </div>
+                      )}
+                    </div>
+                    <span
+                      className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full flex-shrink-0"
+                      style={{ background: `${champColor}18`, color: champColor }}
+                    >
+                      <i className={`ti ${champIcon}`} style={{ fontSize: 9 }} />
+                      {champLabel}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )
+          }
+
+          // Snapshot item
+          const meta = TRIGGER_META[item.trigger] ?? TRIGGER_META.PREDICTION
+          return (
+            <div key={i} className="flex gap-3.5 pb-4 relative">
+              {/* Dot */}
+              <div
+                className="w-[23px] h-[23px] rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 relative z-10"
+                style={{
+                  background: isLast ? meta.color : `${meta.color}18`,
+                  border: `1px solid ${isLast ? meta.color : `${meta.color}40`}`,
+                  boxShadow: isLast ? `0 0 10px ${meta.color}55` : "none",
+                }}
+              >
+                <i className={`ti ${meta.icon}`} style={{ fontSize: 10, color: isLast ? "white" : meta.color }} />
+              </div>
+
+              {/* Card */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                    style={{
+                      background: `${meta.color}15`,
+                      color: meta.color,
+                      border: `0.5px solid ${meta.color}30`,
+                    }}
+                  >
+                    {meta.label}
+                  </span>
+                  {dateStr && (
+                    <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.20)" }}>
+                      {dateStr} · {timeStr}
+                    </span>
+                  )}
+                  <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.15)" }}>
+                    · {item.predictionCount} pred{item.predictionCount !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <div
+                  className="rounded-xl px-4 py-3 text-[13px] leading-relaxed italic"
+                  style={{
+                    background: isLast ? `${meta.color}08` : "rgba(255,255,255,0.02)",
+                    border: `0.5px solid ${isLast ? `${meta.color}25` : "rgba(255,255,255,0.06)"}`,
+                    borderLeft: `2px solid ${meta.color}`,
+                    color: isLast ? "rgba(255,255,255,0.78)" : "rgba(255,255,255,0.42)",
+                  }}
+                >
+                  &ldquo;{item.roast}&rdquo;
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Main component ────────────────────────────────────────────────────────
+
 export default function HistoryDashboard() {
-  const searchParams = useSearchParams()
-  const account = useCurrentAccount()
+  const searchParams  = useSearchParams()
+  const account       = useCurrentAccount()
+  const urlUserId     = searchParams.get("userId")
+  const walletUserId  = account?.address ?? null
+  const userId        = urlUserId || walletUserId
 
-  const urlUserId = searchParams.get("userId")
-  const walletUserId = account?.address ?? null
-  const userId = urlUserId || walletUserId
-
-  const [roast, setRoast] = useState<string>("No predictions yet. Too scared to be wrong?")
+  const [roast, setRoast]               = useState<string>("No predictions yet. Too scared to be wrong?")
   const [memoriesUsed, setMemoriesUsed] = useState(0)
-  const [memories, setMemories] = useState<string[]>([])
-  const [loading, setLoading] = useState(false)
+  const [memories, setMemories]         = useState<string[]>([])
+  const [snapshots, setSnapshots]       = useState<RoastSnapshot[]>([])
+  const [roastTs, setRoastTs]           = useState<number | null>(null)
+  const [loading, setLoading]           = useState(false)
+  const [snapshotsLoading, setSnapshotsLoading] = useState(false)
 
   useEffect(() => {
     if (!userId) return
     setLoading(true)
-    fetch(`/api/roast?userId=${encodeURIComponent(userId)}`)
-      .then(r => r.json())
-      .then(data => {
+    setSnapshotsLoading(true)
+
+    // Roast: 1-hour localStorage cache, invalidated if new prediction since last cache
+    ;(async () => {
+      const CACHE_TTL = 60 * 60 * 1000 // 1 hour
+      try {
+        const cachedStr  = localStorage.getItem(`var-history-roast-${userId}`)
+        const lastPredStr = localStorage.getItem(`var-last-prediction-${userId}`)
+        if (cachedStr) {
+          const cached   = JSON.parse(cachedStr) as { roast: string; memoriesUsed: number; memories: string[]; ts: number }
+          const age      = Date.now() - (cached.ts ?? 0)
+          const lastPred = lastPredStr ? parseInt(lastPredStr) : 0
+          // Reject poisoned cache (error response stored memories as null/undefined)
+          const memoriesValid = Array.isArray(cached.memories)
+          // Use cache if fresh, no new prediction, and memories are a real array
+          if (age < CACHE_TTL && lastPred <= (cached.ts ?? 0) && memoriesValid) {
+            setRoast(cached.roast || "No predictions yet. Too scared to be wrong?")
+            setMemoriesUsed(cached.memoriesUsed || 0)
+            setMemories(cached.memories)
+            setRoastTs(cached.ts ?? null)
+            setLoading(false)
+            return
+          }
+        }
+      } catch { /* ignore localStorage errors */ }
+
+      // Cache miss / stale / new prediction → fetch fresh (bust server cache too)
+      try {
+        const res  = await fetch(`/api/roast?userId=${encodeURIComponent(userId)}&bust=1`)
+        const data = await res.json()
+        const now = Date.now()
         setRoast(data.roast || "No predictions yet. Too scared to be wrong?")
         setMemoriesUsed(data.memoriesUsed || 0)
         setMemories(data.memories || [])
-      })
+        setRoastTs(now)
+        // Only cache valid responses — never cache error responses (memories would be null)
+        if (Array.isArray(data.memories)) {
+          try {
+            localStorage.setItem(`var-history-roast-${userId}`, JSON.stringify({
+              roast: data.roast, memoriesUsed: data.memoriesUsed, memories: data.memories, ts: now,
+            }))
+          } catch { /* ignore */ }
+        }
+      } catch { /* non-critical */ }
+      setLoading(false)
+    })()
+
+    // Snapshots — always read directly from Walrus, no Groq
+    fetch(`/api/roast/history?userId=${encodeURIComponent(userId)}`)
+      .then(r => r.json())
+      .then(data => setSnapshots(data.snapshots ?? []))
       .catch(() => {})
-      .finally(() => setLoading(false))
+      .finally(() => setSnapshotsLoading(false))
   }, [userId])
 
-  // Wallet not connected and no userId in URL
   if (!userId) {
     return (
       <>
         <Navbar />
-        <div className="dark bg-grid-pattern relative overflow-hidden flex flex-col justify-center" style={{ background: "#060C18", minHeight: "calc(100vh - 65px)" }}>
-          {/* Ambient Glow */}
-          <div className="absolute top-[20%] left-[25%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.06] dark:opacity-[0.1] blur-[100px] pointer-events-none -z-10 animate-pulse-glow" />
-
-          <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-24 flex flex-col items-center gap-6 text-center animate-fade-in-up relative" style={{ zIndex: 1 }}>
+        <div
+          className="dark bg-grid-pattern relative overflow-hidden"
+          style={{ background: "#060C18", minHeight: "calc(100vh - 65px)", display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
+          <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
+          <main className="max-w-2xl mx-auto px-4 sm:px-6 py-28 flex flex-col items-center gap-6 text-center relative animate-fade-in-up" style={{ zIndex: 1 }}>
             <div
               className="flex items-center justify-center rounded-full"
-              style={{
-                width: 72,
-                height: 72,
-                background: "rgba(59,130,246,0.10)",
-                border: "0.5px solid rgba(59,130,246,0.22)",
-              }}
+              style={{ width: 72, height: 72, background: "rgba(59,130,246,0.10)", border: "1px solid rgba(59,130,246,0.18)" }}
             >
-              <i className="ti ti-wallet text-[#3B82F6]" style={{ fontSize: 32 }} />
+              <i className="ti ti-history" style={{ fontSize: 32, color: "#3B82F6" }} />
             </div>
-            <div>
-              <h1 className="text-[26px] font-semibold mb-2 text-white">
-                Connect your wallet
-              </h1>
-              <p className="text-[14px] max-w-sm mx-auto text-neutral-400">
-                Connect your Sui wallet to see your prediction history, or share a direct link with a wallet address.
-              </p>
-            </div>
-            <div className="hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] active:scale-95 transition-all rounded-full">
-              <ConnectButton
-                connectText="Connect Sui Wallet"
-                style={{
-                  background: "#3B82F6",
-                  color: "white",
-                  borderRadius: "99px",
-                  fontSize: "13px",
-                  fontWeight: "500",
-                  padding: "10px 24px",
-                  border: "none",
-                  cursor: "pointer",
-                }}
-              />
-            </div>
-            <p className="text-[12px] text-neutral-500">
-              Or view anyone&apos;s record via{" "}
-              <code
-                className="text-[11px] px-1.5 py-0.5 rounded font-mono"
-                style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.4)" }}
-              >
-                /history?userId=0x...
-              </code>
+            <h1 className="text-[28px] font-medium text-white">View your prediction history</h1>
+            <p className="text-[14px] max-w-xs" style={{ color: "rgba(255,255,255,0.40)" }}>
+              Connect your Sui wallet to see your full prediction record and how VAR&apos;s verdict evolved.
             </p>
+            <ConnectButton
+              connectText="Connect Sui Wallet"
+              style={{ background: "#3B82F6", color: "white", borderRadius: "99px", fontSize: "13px", fontWeight: "500", padding: "10px 24px", border: "none", cursor: "pointer" }}
+            />
           </main>
         </div>
       </>
     )
   }
 
-  const predictions = parseHistoryMemories(memories)
-  const total = predictions.length
-  const correct = predictions.filter(p => p.status === "correct").length
-  const accuracy = correct + (predictions.filter(p => p.status === "wrong").length) > 0
-    ? Math.round((correct / (correct + predictions.filter(p => p.status === "wrong").length)) * 100)
-    : 0
+  const { total, correct, accuracy } = computeStats(memories)
+  const timeline = buildTimeline(memories, snapshots)
+  const timelineLoading = loading || snapshotsLoading
 
   return (
     <>
       <Navbar />
       <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#060C18", minHeight: "calc(100vh - 65px)" }}>
-        {/* Glow Spots */}
-        <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] dark:opacity-[0.1] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
-        <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] dark:opacity-[0.06] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
+        <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
+        <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
 
         <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 relative" style={{ zIndex: 1 }}>
           <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 items-start">
 
-            {/* Left sidebar */}
+            {/* Sidebar */}
             <aside className="w-full lg:w-72 xl:w-80 flex-shrink-0 animate-fade-in-up delay-100">
               <div className="flex flex-col gap-4 lg:sticky lg:top-20">
 
-                {/* Profile card */}
-                <div
-                  className="rounded-2xl p-5 border border-white/10 backdrop-blur-xl transition-all duration-300 hover:shadow-2xl hover:shadow-[#3B82F6]/3"
-                  style={{
-                    background: "rgba(255, 255, 255, 0.03)",
-                  }}
-                >
+                {/* Profile */}
+                <div className="rounded-2xl p-5 border border-white/10 backdrop-blur-xl" style={{ background: "rgba(255,255,255,0.03)" }}>
                   <div className="flex items-center gap-3.5 mb-4">
                     <div
                       className="flex items-center justify-center rounded-full text-white font-semibold flex-shrink-0 border border-[#3B82F6]/25 select-none"
-                      style={{ width: 52, height: 52, background: "rgba(59, 130, 246, 0.12)", fontSize: 18 }}
+                      style={{ width: 52, height: 52, background: "rgba(59,130,246,0.12)", fontSize: 18 }}
                     >
                       {userId.slice(2, 4).toUpperCase() || "AN"}
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[14px] font-semibold font-mono text-white truncate">
-                        {truncateAddress(userId)}
-                      </div>
-                      <div className="text-[12px] text-neutral-400">
-                        Prediction record · 2026
-                      </div>
+                      <div className="text-[14px] font-semibold font-mono text-white truncate">{truncateAddress(userId)}</div>
+                      <div className="text-[12px] text-neutral-400">Prediction record · 2026</div>
                     </div>
                   </div>
-
-                  <div
-                    className="grid grid-cols-3 gap-1 pt-4 border-t border-white/5"
-                  >
+                  <div className="grid grid-cols-3 gap-1 pt-4 border-t border-white/5">
                     {[
-                      { value: total, label: "Total", color: "white" },
-                      { value: correct, label: "Correct", color: "#1D9E75" },
+                      { value: total,         label: "Total",    color: "white"   },
+                      { value: correct,       label: "Correct",  color: "#1D9E75" },
                       { value: `${accuracy}%`, label: "Accuracy", color: "#93C5FD" },
                     ].map(({ value, label, color }) => (
                       <div key={label} className="text-center">
@@ -204,7 +549,7 @@ export default function HistoryDashboard() {
                   </div>
                 </div>
 
-                {/* Share card button */}
+                {/* Share */}
                 <Link
                   href={`/card?userId=${encodeURIComponent(userId)}`}
                   className="group flex items-center justify-center gap-2 text-[13px] font-semibold py-3 rounded-full w-full transition-all duration-300 active:scale-[0.97] hover:shadow-lg hover:shadow-[#3B82F6]/20"
@@ -215,22 +560,45 @@ export default function HistoryDashboard() {
                 </Link>
 
                 {/* Walrus proof */}
-                <div
-                  className="rounded-2xl p-4 border border-white/10 backdrop-blur-xl"
-                  style={{
-                    background: "rgba(255, 255, 255, 0.03)",
-                  }}
-                >
-                  <div className="flex items-center gap-2 mb-2 select-none">
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#1D9E75", flexShrink: 0 }} className="animate-pulse" />
-                    <span className="text-[12px] font-semibold text-neutral-300">
-                      Verifiable on Walrus Mainnet
-                    </span>
+                <div className="rounded-2xl p-4 border border-white/10" style={{ background: "rgba(255,255,255,0.03)" }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#1D9E75" }} className="animate-pulse flex-shrink-0" />
+                    <span className="text-[12px] font-semibold text-neutral-300">Stored on Walrus Mainnet</span>
                   </div>
                   <p className="text-[12px] text-neutral-400 leading-relaxed">
-                    {memoriesUsed} {memoriesUsed === 1 ? "memory" : "memories"} stored permanently under namespace{" "}
-                    <code className="text-[10px] font-mono px-1 py-0.5 rounded bg-white/5">var-wc2026</code>. Cannot be deleted or modified.
+                    {memoriesUsed > 0
+                      ? <>VAR is holding <span className="text-white font-semibold">{memoriesUsed}</span> {memoriesUsed === 1 ? "record" : "records"} against you — stored permanently on Walrus Mainnet.</>
+                      : <>No records yet. Make a prediction and VAR will track it forever.</>
+                    }
                   </p>
+                </div>
+
+                {/* VAR signal key */}
+                <div className="rounded-2xl p-4 border border-white/10" style={{ background: "rgba(255,255,255,0.02)" }}>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider mb-3" style={{ color: "rgba(255,255,255,0.25)" }}>
+                    VAR signal key
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {[
+                      { color: "#94A3B8", icon: "ti-clock-hour-4", label: "Pending prediction"  },
+                      { color: "#1D9E75", icon: "ti-check",        label: "Correct prediction"  },
+                      { color: "#EF4444", icon: "ti-x",            label: "Wrong prediction"    },
+                      { color: "#FBBF24", icon: "ti-lock",         label: "Champion pick"       },
+                      { color: "#3B82F6", icon: "ti-quote",        label: "VAR snapshot"        },
+                      { color: "#EAB308", icon: "ti-trophy",       label: "After match result"  },
+                      { color: "#EF4444", icon: "ti-flame",        label: "Pattern detected"    },
+                    ].map(({ color, icon, label }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <div
+                          className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+                          style={{ background: `${color}18`, border: `1px solid ${color}40` }}
+                        >
+                          <i className={`ti ${icon}`} style={{ fontSize: 8, color }} />
+                        </div>
+                        <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.35)" }}>{label}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </aside>
@@ -238,73 +606,42 @@ export default function HistoryDashboard() {
             {/* Main content */}
             <main className="flex-1 flex flex-col gap-6 min-w-0 animate-fade-in-up delay-200 w-full">
 
+              {/* Latest roast */}
               <div>
-                <div
-                  className="text-[11px] font-semibold uppercase tracking-wider mb-2 text-neutral-400 flex items-center gap-1.5 select-none"
-                >
+                <div className="text-[11px] font-semibold uppercase tracking-wider mb-2 text-neutral-400 flex items-center gap-1.5 select-none">
                   <i className="ti ti-quote text-[#3B82F6]" />
                   Latest VAR verdict
                 </div>
                 {loading ? (
-                  <div
-                    className="rounded-2xl p-8 text-center border border-white/10 backdrop-blur-xl"
-                    style={{
-                      background: "rgba(255, 255, 255, 0.03)",
-                    }}
-                  >
-                    <span className="text-[13px] text-neutral-400">
-                      Loading verdict...
-                    </span>
+                  <div className="rounded-2xl p-8 text-center border border-white/10" style={{ background: "rgba(255,255,255,0.03)" }}>
+                    <span className="text-[13px] text-neutral-400">Loading verdict...</span>
                   </div>
                 ) : (
                   <div className="relative group">
                     <div className="absolute inset-0 bg-[#3B82F6]/3 rounded-2xl filter blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-                    <RoastCard roast={roast} memoriesUsed={memoriesUsed} />
+                    <RoastCard roast={roast} memoriesUsed={memoriesUsed} timestamp={roastTs} />
                   </div>
                 )}
               </div>
 
-              {predictions.length > 0 ? (
-                <div>
-                  <div
-                    className="text-[11px] font-semibold uppercase tracking-wider mb-2 text-neutral-400 flex items-center gap-1.5 select-none"
-                  >
-                    <i className="ti ti-history text-[#3B82F6]" />
-                    Full prediction history
-                  </div>
-                  <div
-                    className="rounded-2xl px-5 py-2 border border-white/10 backdrop-blur-xl"
-                    style={{
-                      background: "rgba(255, 255, 255, 0.03)",
-                    }}
-                  >
-                    {predictions.map((pred, i) => (
-                      <HistoryItem
-                        key={i}
-                        matchName={pred.matchName}
-                        pick={pred.predictedWinner}
-                        confidence={pred.confidence}
-                        status={pred.status}
-                        actualResult={pred.actualResult}
-                      />
-                    ))}
-                  </div>
+              {/* Unified timeline */}
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider mb-3 text-neutral-400 flex items-center gap-1.5 select-none">
+                  <i className="ti ti-timeline text-[#3B82F6]" />
+                  Prediction &amp; roast history
+                  {timeline.length > 0 && (
+                    <span
+                      className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+                      style={{ background: "rgba(59,130,246,0.12)", color: "#93C5FD", border: "0.5px solid rgba(59,130,246,0.20)" }}
+                    >
+                      {timeline.length}
+                    </span>
+                  )}
                 </div>
-              ) : !loading ? (
-                <div
-                  className="rounded-2xl p-10 text-center border border-white/10 backdrop-blur-xl"
-                  style={{
-                    background: "rgba(255, 255, 255, 0.03)",
-                  }}
-                >
-                  <p className="text-[14px] text-neutral-400">
-                    No predictions yet.{" "}
-                    <Link href="/predict" className="font-semibold transition-colors text-[#3B82F6] hover:text-[#93C5FD]">
-                      Start predicting now →
-                    </Link>
-                  </p>
+                <div className="rounded-2xl p-5 border border-white/10" style={{ background: "rgba(255,255,255,0.02)" }}>
+                  <UnifiedTimeline items={timeline} loading={timelineLoading} />
                 </div>
-              ) : null}
+              </div>
             </main>
           </div>
         </div>

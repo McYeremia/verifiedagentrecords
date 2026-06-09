@@ -1,4 +1,3 @@
-import Image from "next/image"
 import { getFlagUrl, getTLA } from "../lib/matches"
 
 interface FlagImgProps {
@@ -30,12 +29,14 @@ export default function FlagImg({ team, height = 28 }: FlagImgProps) {
   }
 
   return (
-    <Image
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
       src={url}
       alt={team}
       width={width}
       height={height}
-      unoptimized
+      loading="eager"
+      decoding="async"
       className="flex-shrink-0"
       style={{
         width,
@@ -45,6 +46,7 @@ export default function FlagImg({ team, height = 28 }: FlagImgProps) {
         border: "0.5px solid rgba(255,255,255,0.14)",
         boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
         display: "inline-block",
+        background: "rgba(255,255,255,0.06)",
       }}
     />
   )

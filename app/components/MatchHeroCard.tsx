@@ -51,7 +51,7 @@ const CONFIDENCE_OPTIONS = [
   { value: "low", label: "Low" },
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
-  { value: "all-in", label: "All in 🔥" },
+  { value: "all-in", label: "All in (Max)" },
 ]
 
 export default function MatchHeroCard({

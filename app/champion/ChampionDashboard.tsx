@@ -29,6 +29,8 @@ export default function ChampionDashboard() {
   useEffect(() => {
     if (!userId) return
     setChecking(true)
+    setCurrentPick(null)
+    setLockedAt(null)
     fetch(`/api/champion?userId=${encodeURIComponent(userId)}`)
       .then(r => r.json())
       .then(data => {
@@ -64,9 +66,16 @@ export default function ChampionDashboard() {
     return (
       <>
         <Navbar />
-        <div style={{ background: "#060C18", minHeight: "calc(100vh - 65px)" }}>
-          <main className="max-w-2xl mx-auto px-4 sm:px-6 py-28 flex flex-col items-center gap-6 text-center">
-            <div className="text-[72px] leading-none">🏆</div>
+        <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#060C18", minHeight: "calc(100vh - 65px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] dark:opacity-[0.1] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
+          <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] dark:opacity-[0.06] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
+          <main className="max-w-2xl mx-auto px-4 sm:px-6 py-28 flex flex-col items-center gap-6 text-center relative animate-fade-in-up" style={{ zIndex: 1 }}>
+            <div
+              className="flex items-center justify-center rounded-full"
+              style={{ width: 72, height: 72, background: "rgba(59,130,246,0.10)", border: "1px solid rgba(59,130,246,0.18)" }}
+            >
+              <i className="ti ti-trophy" style={{ fontSize: 32, color: "#3B82F6" }} />
+            </div>
             <h1 className="text-[28px] font-medium text-white">Who wins it all?</h1>
             <p className="text-[14px] max-w-xs" style={{ color: "rgba(255,255,255,0.40)" }}>
               Connect your Sui wallet to lock in your World Cup 2026 champion pick. VAR will remember forever.
@@ -90,30 +99,15 @@ export default function ChampionDashboard() {
     )
   }
 
-  // Checking pick from Walrus
-  if (checking) {
+  // Already locked in — show pick (only render after check is done to avoid flicker)
+  if (!checking && currentPick) {
     return (
       <>
         <Navbar />
-        <div style={{ background: "#060C18", minHeight: "calc(100vh - 65px)" }}>
-          <main className="max-w-2xl mx-auto px-4 py-28 flex flex-col items-center">
-            <p className="text-[13px]" style={{ color: "rgba(255,255,255,0.30)" }}>
-              Checking Walrus memory...
-            </p>
-          </main>
-        </div>
-      </>
-    )
-  }
-
-  // Already locked in — show pick
-  if (currentPick) {
-    const team = TEAMS.find(t => t.name === currentPick)
-    return (
-      <>
-        <Navbar />
-        <div style={{ background: "#060C18", minHeight: "calc(100vh - 65px)" }}>
-          <main className="max-w-2xl mx-auto px-4 sm:px-6 py-20 flex flex-col items-center gap-8 text-center">
+        <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#060C18", minHeight: "calc(100vh - 65px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] dark:opacity-[0.1] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
+          <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] dark:opacity-[0.06] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
+          <main className="max-w-2xl mx-auto px-4 sm:px-6 py-20 flex flex-col items-center gap-8 text-center relative animate-fade-in-up" style={{ zIndex: 1 }}>
             <div>
               <div
                 className="text-[11px] font-semibold uppercase tracking-widest mb-6"
@@ -121,10 +115,14 @@ export default function ChampionDashboard() {
               >
                 World Cup 2026 · Your Champion Pick
               </div>
-              <div className="text-[64px] leading-none mb-2">🏆</div>
+              <div
+                className="flex items-center justify-center rounded-full mx-auto mb-2"
+                style={{ width: 64, height: 64, background: "rgba(59,130,246,0.10)", border: "1px solid rgba(59,130,246,0.18)" }}
+              >
+                <i className="ti ti-trophy" style={{ fontSize: 28, color: "#3B82F6" }} />
+              </div>
             </div>
 
-            {/* Locked card */}
             <div
               className="w-full max-w-xs rounded-2xl p-8 flex flex-col items-center gap-4"
               style={{
@@ -161,7 +159,7 @@ export default function ChampionDashboard() {
             </div>
 
             <p className="text-[13px] max-w-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.32)" }}>
-              VAR has recorded this on Walrus Mainnet. If {currentPick} doesn&apos;t win, VAR will never let you forget.
+              {`VAR has recorded this on Walrus Mainnet. If ${currentPick} doesn't win, VAR will never let you forget.`}
             </p>
 
             <div className="flex items-center gap-2">
@@ -179,12 +177,14 @@ export default function ChampionDashboard() {
     )
   }
 
-  // Pick form
+  // Pick form — show immediately; grid is disabled/dimmed while checking
   return (
     <>
       <Navbar />
-      <div style={{ background: "#060C18", minHeight: "calc(100vh - 65px)" }}>
-        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 pb-32">
+      <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#060C18", minHeight: "calc(100vh - 65px)" }}>
+        <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] dark:opacity-[0.1] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
+        <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] dark:opacity-[0.06] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
+        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 pb-32 relative" style={{ zIndex: 1 }}>
 
           {/* Header */}
           <div className="text-center mb-14">
@@ -203,8 +203,21 @@ export default function ChampionDashboard() {
             </p>
           </div>
 
-          {/* Team grid */}
-          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2.5 mb-10">
+          {/* Checking indicator — inline, not a blocker */}
+          {checking && (
+            <div className="flex items-center justify-center gap-2 mb-6">
+              <i className="ti ti-loader animate-slow-spin text-[13px]" style={{ color: "rgba(255,255,255,0.25)" }} />
+              <span className="text-[12px]" style={{ color: "rgba(255,255,255,0.25)" }}>
+                Checking if you already picked...
+              </span>
+            </div>
+          )}
+
+          {/* Team grid — rendered immediately, interactions disabled while checking */}
+          <div
+            className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2.5 mb-10 transition-opacity duration-300"
+            style={{ opacity: checking ? 0.45 : 1, pointerEvents: checking ? "none" : "auto" }}
+          >
             {TEAMS.map(team => {
               const isSelected = selectedTeam === team.name
               return (
@@ -247,13 +260,14 @@ export default function ChampionDashboard() {
             borderTop: "0.5px solid rgba(255,255,255,0.06)",
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
+            zIndex: 50,
           }}
         >
           <div className="max-w-md w-full flex items-center justify-between gap-4">
             {selectedTeam ? (
               <>
                 <div className="flex items-center gap-3">
-                  <FlagImg team={selectedTeam!} height={26} />
+                  <FlagImg team={selectedTeam} height={26} />
                   <div>
                     <div className="text-[15px] font-bold text-white tracking-widest">
                       {getTLA(selectedTeam)}
@@ -263,7 +277,7 @@ export default function ChampionDashboard() {
                 </div>
                 <button
                   onClick={handleLockIn}
-                  disabled={submitting}
+                  disabled={submitting || checking}
                   className="inline-flex items-center gap-2 text-white text-[13px] font-medium transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-50"
                   style={{ background: "#3B82F6", padding: "11px 28px", borderRadius: 99 }}
                 >
@@ -271,7 +285,7 @@ export default function ChampionDashboard() {
                     className={`ti ${submitting ? "ti-loader animate-slow-spin" : "ti-lock"}`}
                     style={{ fontSize: 14 }}
                   />
-                  {submitting ? "Locking in..." : "Lock in forever"}
+                  {submitting ? "Locking in..." : checking ? "Verifying..." : "Lock in forever"}
                 </button>
               </>
             ) : (
@@ -279,7 +293,7 @@ export default function ChampionDashboard() {
                 className="text-[13px] mx-auto text-center"
                 style={{ color: "rgba(255,255,255,0.30)" }}
               >
-                Select a team above to lock in your pick
+                {checking ? "Checking your existing pick..." : "Select a team above to lock in your pick"}
               </p>
             )}
           </div>

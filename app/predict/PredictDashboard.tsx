@@ -73,7 +73,9 @@ function computeStats(memories: string[]) {
 export default function PredictDashboard() {
   const searchParams = useSearchParams()
   const account = useCurrentAccount()
-  const userId = account?.address ?? null
+  const urlUserId = searchParams.get("userId")
+  const walletUserId = account?.address ?? null
+  const userId = urlUserId || walletUserId
 
   const [allMatches, setAllMatches] = useState<Match[]>([])
   const [selectedGroup, setSelectedGroup] = useState<string>("")
@@ -84,6 +86,7 @@ export default function PredictDashboard() {
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [pickStat, setPickStat] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/matches?upcoming")
@@ -100,15 +103,43 @@ export default function PredictDashboard() {
       .catch(() => {})
   }, [searchParams])
 
-  const loadRoast = useCallback(async () => {
+  // bust=false → use localStorage cache (verdict stays until new prediction)
+  // bust=true  → bypass cache, call Groq (triggered only by new prediction)
+  const loadRoast = useCallback(async (bust = false) => {
     if (!userId) return
+
+    if (!bust) {
+      try {
+        const hit = localStorage.getItem(`var-predict-roast-${userId}`)
+        if (hit) {
+          const d = JSON.parse(hit)
+          // Reject poisoned cache — must have a real array (null = error response was cached)
+          if (Array.isArray(d.memories)) {
+            setRoast(d.roast ?? null)
+            setMemoriesUsed(d.memoriesUsed ?? 0)
+            setMemories(d.memories)
+            return
+          }
+        }
+      } catch { /* ignore localStorage errors */ }
+    }
+
     setLoading(true)
     try {
-      const res = await fetch(`/api/roast?userId=${encodeURIComponent(userId)}`)
+      const url = `/api/roast?userId=${encodeURIComponent(userId)}${bust ? "&bust=1" : ""}`
+      const res = await fetch(url)
       const data = await res.json()
       setRoast(data.roast ?? null)
       setMemoriesUsed(data.memoriesUsed ?? 0)
       setMemories(data.memories ?? [])
+      // Only cache valid responses — never cache error responses (memories would be null)
+      if (Array.isArray(data.memories)) {
+        try {
+          localStorage.setItem(`var-predict-roast-${userId}`, JSON.stringify({
+            roast: data.roast, memoriesUsed: data.memoriesUsed, memories: data.memories,
+          }))
+        } catch { /* ignore */ }
+      }
     } catch {
       setRoast("VAR is loading its verdict...")
     } finally {
@@ -138,7 +169,27 @@ export default function PredictDashboard() {
       })
       if (res.ok) {
         setSubmitted(true)
-        await loadRoast()
+        setPickStat(null)
+        // Mark new prediction so history page knows to invalidate its 1h cache
+        try { localStorage.setItem(`var-last-prediction-${userId}`, Date.now().toString()) } catch {}
+        // Clear predict cache so fresh verdict is generated
+        try { localStorage.removeItem(`var-predict-roast-${userId}`) } catch {}
+        // Reload verdict — new prediction = fresh Groq call (bust cache)
+        void loadRoast(true)
+        setTimeout(() => {
+          fetch(`/api/predictions/stats?matchId=${selectedMatch.id}`)
+            .then(r => r.json())
+            .then(data => {
+              const pct: number = data.picks?.[pick] ?? 0
+              const total: number = data.total ?? 0
+              if (total === 1) {
+                setPickStat(`You're the first to predict this match`)
+              } else if (total > 1) {
+                setPickStat(`${pct}% of ${total} predictors picked ${getTLA(pick)}`)
+              }
+            })
+            .catch(() => {})
+        }, 2500)
         const groupMatches = allMatches.filter(m => m.group === selectedGroup)
         const idx = groupMatches.findIndex(m => m.id === selectedMatch.id)
         if (idx >= 0 && idx < groupMatches.length - 1) setSelectedMatch(groupMatches[idx + 1])
@@ -158,47 +209,34 @@ export default function PredictDashboard() {
     return (
       <>
         <Navbar />
-        <div className="dark bg-grid-pattern relative overflow-hidden flex flex-col justify-center" style={{ background: "#060C18", minHeight: "calc(100vh - 65px)" }}>
-          {/* Ambient Glow */}
-          <div className="absolute top-[20%] left-[25%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.06] dark:opacity-[0.1] blur-[100px] pointer-events-none -z-10 animate-pulse-glow" />
-
-          <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-24 flex flex-col items-center gap-6 text-center animate-fade-in-up relative" style={{ zIndex: 1 }}>
+        <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#060C18", minHeight: "calc(100vh - 65px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {/* Glow Spots */}
+          <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] dark:opacity-[0.1] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
+          <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] dark:opacity-[0.06] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
+          <main className="max-w-2xl mx-auto px-4 sm:px-6 py-28 flex flex-col items-center gap-6 text-center relative animate-fade-in-up" style={{ zIndex: 1 }}>
             <div
-              className="flex items-center justify-center rounded-full border border-[#3B82F6]/25"
-              style={{
-                width: 72,
-                height: 72,
-                background: "rgba(59,130,246,0.10)",
-              }}
+              className="flex items-center justify-center rounded-full"
+              style={{ width: 72, height: 72, background: "rgba(59,130,246,0.10)", border: "1px solid rgba(59,130,246,0.18)" }}
             >
-              <i className="ti ti-wallet text-[#3B82F6]" style={{ fontSize: 32 }} />
+              <i className="ti ti-target" style={{ fontSize: 32, color: "#3B82F6" }} />
             </div>
-            <div>
-              <h1 className="text-[26px] font-semibold text-white">
-                Connect your Sui wallet to start predicting
-              </h1>
-              <p className="text-[14px] mt-2 max-w-sm mx-auto text-neutral-400">
-                VAR will remember your predictions permanently on Walrus Mainnet — verified through your wallet address.
-              </p>
-            </div>
-            <div className="hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] active:scale-95 transition-all rounded-full">
-              <ConnectButton
-                connectText="Connect Sui Wallet"
-                style={{
-                  background: "#3B82F6",
-                  color: "white",
-                  borderRadius: "99px",
-                  fontSize: "13px",
-                  fontWeight: "500",
-                  padding: "10px 24px",
-                  border: "none",
-                  cursor: "pointer",
-                }}
-              />
-            </div>
-            <p className="text-[12px] text-neutral-500">
-              No gas fees · Sui Wallet, Suiet, or Phantom supported
+            <h1 className="text-[28px] font-medium text-white">Start predicting matches</h1>
+            <p className="text-[14px] max-w-xs" style={{ color: "rgba(255,255,255,0.40)" }}>
+              Connect your Sui wallet to predict World Cup 2026 matches. VAR will remember your calls forever on Walrus.
             </p>
+            <ConnectButton
+              connectText="Connect Sui Wallet"
+              style={{
+                background: "#3B82F6",
+                color: "white",
+                borderRadius: "99px",
+                fontSize: "13px",
+                fontWeight: "500",
+                padding: "10px 24px",
+                border: "none",
+                cursor: "pointer",
+              }}
+            />
           </main>
         </div>
       </>
@@ -215,9 +253,82 @@ export default function PredictDashboard() {
         <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] dark:opacity-[0.06] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
 
         <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 relative" style={{ zIndex: 1 }}>
-          <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 items-start">
+          <div className="flex flex-col lg:flex-row-reverse gap-6 lg:gap-8 items-start">
 
-            {/* ── Left sidebar ─────────────────────────────────── */}
+            {/* ── Main content (rendered first) ─────────────────────────────────── */}
+            <main className="flex-1 flex flex-col gap-6 min-w-0 animate-fade-in-up delay-200 w-full">
+
+              {submitted && (
+                <div
+                  className="rounded-2xl p-3.5 text-[13px] font-medium flex items-center gap-2 border border-[#1D9E75]/25 shadow-md shadow-[#1D9E75]/5 animate-fade-in-up"
+                  style={{ background: "rgba(29, 158, 117, 0.12)", color: "#34D399" }}
+                >
+                  <i className="ti ti-check text-[15px] flex-shrink-0" />
+                  <span>
+                    Prediction saved to Walrus! VAR has taken note.
+                    {pickStat && (
+                      <span className="ml-2 opacity-60 font-normal">· {pickStat}</span>
+                    )}
+                  </span>
+                </div>
+              )}
+
+              {selectedMatch ? (
+                <div>
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wider mb-2 text-neutral-400 flex items-center gap-1.5 select-none"
+                  >
+                    <i className="ti ti-bolt text-[#3B82F6]" />
+                    Next match
+                  </div>
+                  <MatchHeroCard
+                    match={selectedMatch}
+                    redirectOnSubmit={false}
+                    onSubmit={handleSubmitPrediction}
+                    isSubmitting={submitting}
+                  />
+                </div>
+              ) : (
+                <div
+                  className="rounded-2xl p-10 text-center border border-white/10 backdrop-blur-xl"
+                  style={{
+                    background: "rgba(255, 255, 255, 0.03)",
+                  }}
+                >
+                  <p className="text-[14px] text-neutral-400">
+                    No matches available at this time.
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <div
+                  className="text-[11px] font-semibold uppercase tracking-wider mb-2 text-neutral-400 flex items-center gap-1.5 select-none"
+                >
+                  <i className="ti ti-quote text-[#3B82F6]" />
+                  VAR says
+                </div>
+                {loading ? (
+                  <div
+                    className="rounded-2xl p-8 text-center border border-white/10 backdrop-blur-xl"
+                    style={{
+                      background: "rgba(255, 255, 255, 0.03)",
+                    }}
+                  >
+                    <span className="text-[13px] text-neutral-400">
+                      Loading verdict...
+                    </span>
+                  </div>
+                ) : roast ? (
+                  <div className="relative group">
+                    <div className="absolute inset-0 bg-[#3B82F6]/3 rounded-2xl filter blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                    <RoastCard roast={roast} memoriesUsed={memoriesUsed} />
+                  </div>
+                ) : null}
+              </div>
+            </main>
+
+            {/* ── Left sidebar (rendered second) ─────────────────────────────────── */}
             <aside className="w-full lg:w-72 xl:w-80 flex-shrink-0 animate-fade-in-up delay-100">
               <div className="flex flex-col gap-4 lg:sticky lg:top-20">
 
@@ -267,7 +378,7 @@ export default function PredictDashboard() {
                     background: "rgba(255, 255, 255, 0.03)",
                   }}
                 >
-                  <span style={{ fontSize: 22 }} className="select-none transition-transform group-hover:scale-110">🏆</span>
+                  <i className="ti ti-trophy select-none transition-transform group-hover:scale-110 text-[#3B82F6]" style={{ fontSize: 22 }} />
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px] font-semibold text-white">Pick the champion</div>
                     <div className="text-[11px] text-neutral-400">
@@ -301,7 +412,7 @@ export default function PredictDashboard() {
                                 setSelectedGroup(g)
                                 const first = allMatches.find(m => m.group === g) ?? null
                                 setSelectedMatch(first)
-                                setSubmitted(false)
+                                setSubmitted(false); setPickStat(null)
                               }}
                               className="flex items-center justify-center py-1.5 rounded-lg text-[12px] font-bold transition-all duration-150 active:scale-95"
                               style={{
@@ -326,7 +437,7 @@ export default function PredictDashboard() {
                         {groupMatches.map((m, i) => (
                           <button
                             key={m.id}
-                            onClick={() => { setSelectedMatch(m); setSubmitted(false) }}
+                            onClick={() => { setSelectedMatch(m); setSubmitted(false); setPickStat(null) }}
                             className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
                             style={{
                               borderBottom: i < groupMatches.length - 1 ? "0.5px solid rgba(255, 255, 255, 0.05)" : undefined,
@@ -400,73 +511,6 @@ export default function PredictDashboard() {
               </div>
             </aside>
 
-            {/* ── Main content ─────────────────────────────────── */}
-            <main className="flex-1 flex flex-col gap-6 min-w-0 animate-fade-in-up delay-200 w-full">
-
-              {submitted && (
-                <div
-                  className="rounded-2xl p-3.5 text-[13px] font-medium flex items-center gap-2 border border-[#1D9E75]/25 shadow-md shadow-[#1D9E75]/5 animate-fade-in-up"
-                  style={{ background: "rgba(29, 158, 117, 0.12)", color: "#34D399" }}
-                >
-                  <i className="ti ti-check text-[15px]" />
-                  Prediction saved to Walrus! VAR has taken note.
-                </div>
-              )}
-
-              {selectedMatch ? (
-                <div>
-                  <div
-                    className="text-[11px] font-semibold uppercase tracking-wider mb-2 text-neutral-400 flex items-center gap-1.5 select-none"
-                  >
-                    <i className="ti ti-bolt text-[#3B82F6]" />
-                    Next match
-                  </div>
-                  <MatchHeroCard
-                    match={selectedMatch}
-                    redirectOnSubmit={false}
-                    onSubmit={handleSubmitPrediction}
-                    isSubmitting={submitting}
-                  />
-                </div>
-              ) : (
-                <div
-                  className="rounded-2xl p-10 text-center border border-white/10 backdrop-blur-xl"
-                  style={{
-                    background: "rgba(255, 255, 255, 0.03)",
-                  }}
-                >
-                  <p className="text-[14px] text-neutral-400">
-                    No matches available at this time.
-                  </p>
-                </div>
-              )}
-
-              <div>
-                <div
-                  className="text-[11px] font-semibold uppercase tracking-wider mb-2 text-neutral-400 flex items-center gap-1.5 select-none"
-                >
-                  <i className="ti ti-quote text-[#3B82F6]" />
-                  VAR says
-                </div>
-                {loading ? (
-                  <div
-                    className="rounded-2xl p-8 text-center border border-white/10 backdrop-blur-xl"
-                    style={{
-                      background: "rgba(255, 255, 255, 0.03)",
-                    }}
-                  >
-                    <span className="text-[13px] text-neutral-400">
-                      Loading verdict...
-                    </span>
-                  </div>
-                ) : roast ? (
-                  <div className="relative group">
-                    <div className="absolute inset-0 bg-[#3B82F6]/3 rounded-2xl filter blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-                    <RoastCard roast={roast} memoriesUsed={memoriesUsed} />
-                  </div>
-                ) : null}
-              </div>
-            </main>
           </div>
         </div>
       </div>

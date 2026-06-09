@@ -3,6 +3,7 @@ import { getMemWal } from "../../../lib/memwal"
 import { getMatchByApiId } from "../../../lib/matches"
 import { generateText } from "ai"
 import { createOpenAI } from "@ai-sdk/openai"
+import { saveRoastSnapshot } from "../../../lib/roast-snapshot"
 
 const groq = createOpenAI({
   apiKey: process.env.GROQ_API_KEY,
@@ -123,6 +124,43 @@ export async function GET() {
         const lbText = `[LEADERBOARD] User ${userId}: ${resultCount} predictions, ${correctCount} correct, ${accuracy}% accuracy. Last updated: ${new Date().toISOString()}`
         const lbJob = await mem.remember(lbText)
         await mem.waitForRememberJob(lbJob.job_id)
+
+        // Write [STREAK] — track consecutive wins/losses
+        {
+          const sorted = [...userResultTexts].sort((a: { text: string }, b: { text: string }) => {
+            const tsA = a.text.match(/Timestamp: (.+)/)?.[1] ?? ""
+            const tsB = b.text.match(/Timestamp: (.+)/)?.[1] ?? ""
+            return tsA.localeCompare(tsB)
+          })
+          const outcomes: boolean[] = sorted.map((r: { text: string }) => r.text.includes("— CORRECT"))
+          const alreadyInRecall = userResultTexts.some(
+            (r: { text: string }) => r.text.includes(`Match ${match.id}`) && r.text.includes(`User ${userId}`)
+          )
+          if (!alreadyInRecall) outcomes.push(isCorrect)
+
+          if (outcomes.length > 0) {
+            const lastOut = outcomes[outcomes.length - 1]
+            let streakLen = 1
+            for (let i = outcomes.length - 2; i >= 0; i--) {
+              if (outcomes[i] === lastOut) streakLen++
+              else break
+            }
+            const streakText = `[STREAK] User ${userId} is on a ${streakLen}-game ${lastOut ? "winning" : "losing"} streak. Last: ${predictedWinner} ${isCorrect ? "CORRECT" : "WRONG"}. Timestamp: ${new Date().toISOString()}`
+            const sJob = await mem.remember(streakText)
+            await mem.waitForRememberJob(sJob.job_id)
+          }
+        }
+
+        // Save roast snapshot for this user
+        {
+          const snapMem = await mem.recall({ query: `User ${userId} predictions results wins losses` })
+          const snapUserMems = (snapMem.results ?? [])
+            .filter((r: { text: string }) => r.text.includes(userId))
+            .map((r: { text: string }) => r.text)
+          if (snapUserMems.length > 0) {
+            await saveRoastSnapshot(userId, "RESULT", snapUserMems)
+          }
+        }
 
         resolved++
       }

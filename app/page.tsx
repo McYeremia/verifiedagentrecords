@@ -252,6 +252,134 @@ export default function Home() {
             </div>
           </section>
 
+          {/* ── Memory evolution demo ───────────────────────────── */}
+          <section>
+            <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
+              <div className="mb-14">
+                <div
+                  className="text-[11px] font-semibold uppercase tracking-widest mb-4"
+                  style={{ color: "rgba(255,255,255,0.25)" }}
+                >
+                  Memory in action
+                </div>
+                <h2 className="text-[34px] sm:text-[46px] font-medium text-white leading-tight">
+                  The longer VAR watches,<br className="hidden sm:block" /> the more it hurts
+                </h2>
+                <p className="text-[16px] mt-4 max-w-xl" style={{ color: "rgba(255,255,255,0.36)" }}>
+                  Day 1 VAR is polite. Day 7 VAR has read your pattern, named your bias, and has zero mercy.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+                {/* Day 1 */}
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="text-[11px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full"
+                      style={{
+                        background: "rgba(148,163,184,0.10)",
+                        color: "#94A3B8",
+                        border: "0.5px solid rgba(148,163,184,0.18)",
+                      }}
+                    >
+                      Day 1 · 1 prediction · No results yet
+                    </span>
+                  </div>
+                  <div
+                    className="rounded-2xl p-6 flex flex-col gap-4 flex-1"
+                    style={{
+                      background: "rgba(255,255,255,0.02)",
+                      border: "0.5px solid rgba(255,255,255,0.07)",
+                    }}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="flex items-center justify-center rounded-lg text-white font-bold flex-shrink-0"
+                        style={{ width: 30, height: 30, background: "#3B82F6", fontSize: 10 }}
+                      >
+                        VAR
+                      </div>
+                      <div>
+                        <div className="text-[13px] font-semibold text-white">Verified Agent Records</div>
+                        <div className="text-[11px] text-neutral-500">Official verdict · 1 record</div>
+                      </div>
+                    </div>
+                    <blockquote
+                      className="text-[15px] leading-relaxed text-neutral-300 italic"
+                      style={{ borderLeft: "2px solid #3B82F6", paddingLeft: 14 }}
+                    >
+                      &ldquo;Brazil in the opener — noted. VAR has recorded this prediction and will be watching closely. Make a few more calls and we&apos;ll have a real conversation.&rdquo;
+                    </blockquote>
+                    <div
+                      className="flex items-center gap-1.5 pt-3"
+                      style={{ borderTop: "0.5px solid rgba(255,255,255,0.06)" }}
+                    >
+                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#94A3B8", flexShrink: 0 }} />
+                      <span className="text-[11px] text-neutral-500">Polite. Observational. Waiting.</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Day 7+ */}
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="text-[11px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full"
+                      style={{
+                        background: "rgba(239,68,68,0.10)",
+                        color: "#EF4444",
+                        border: "0.5px solid rgba(239,68,68,0.20)",
+                      }}
+                    >
+                      Day 7+ · 6 predictions · Pattern detected
+                    </span>
+                  </div>
+                  <div
+                    className="rounded-2xl p-6 flex flex-col gap-4 flex-1"
+                    style={{
+                      background: "rgba(239,68,68,0.03)",
+                      border: "0.5px solid rgba(239,68,68,0.16)",
+                    }}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="flex items-center justify-center rounded-lg text-white font-bold flex-shrink-0"
+                        style={{ width: 30, height: 30, background: "#EF4444", fontSize: 10 }}
+                      >
+                        VAR
+                      </div>
+                      <div>
+                        <div className="text-[13px] font-semibold text-white">Verified Agent Records</div>
+                        <div className="text-[11px] text-neutral-500">Official verdict · 14 records</div>
+                      </div>
+                    </div>
+                    <blockquote
+                      className="text-[15px] leading-relaxed text-neutral-300 italic"
+                      style={{ borderLeft: "2px solid #EF4444", paddingLeft: 14 }}
+                    >
+                      &ldquo;Brazil, Argentina, Spain, Germany — you&apos;ve backed legacy names in 5 of 6 matches and gotten 1 right. VAR has seen this pattern before: you trust reputation over form. That&apos;s not analysis, that&apos;s nostalgia.&rdquo;
+                    </blockquote>
+                    <div
+                      className="flex items-center gap-1.5 pt-3"
+                      style={{ borderTop: "0.5px solid rgba(239,68,68,0.12)" }}
+                    >
+                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#EF4444", flexShrink: 0 }} />
+                      <span className="text-[11px] text-neutral-500">Savage. Pattern-aware. Personal.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p
+                className="text-center text-[12px] mt-8"
+                style={{ color: "rgba(255,255,255,0.20)" }}
+              >
+                Example roasts — with your actual history, VAR gets more specific and more brutal.
+              </p>
+            </div>
+          </section>
+
           {/* ── Upcoming matches ────────────────────────────────── */}
           <section>
             <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
@@ -272,7 +400,7 @@ export default function Home() {
                   className="text-[13px] font-medium transition-opacity hover:opacity-100 self-start sm:self-auto"
                   style={{ color: "rgba(255,255,255,0.5)" }}
                 >
-                  Open prediction dashboard →
+                  Open Prediction Dashboard
                 </Link>
               </div>
               <UpcomingList skipFirst={false} limit={8} />

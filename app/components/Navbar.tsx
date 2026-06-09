@@ -19,6 +19,7 @@ export default function Navbar({ dark = false }: NavbarProps) {
     { name: "Champion", href: "/champion" },
     { name: "History", href: "/history" },
     { name: "Leaderboard", href: "/leaderboard" },
+    { name: "Versus", href: "/versus" },
   ]
 
   const isActive = (href: string) => {
