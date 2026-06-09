@@ -43,7 +43,7 @@ function parseHistoryMemories(memories: string[]) {
         predictedWinner: winnerM[1],
         confidence: confM?.[1] ?? "medium",
         status: (result ? (result.isCorrect ? "correct" : "wrong") : "pending") as "correct" | "wrong" | "pending",
-        actualResult: result ? `${result.actualWinner} menang ${result.score}` : undefined,
+        actualResult: result ? `${result.actualWinner} won ${result.score}` : undefined,
       }
     })
     .filter(Boolean) as Array<{
@@ -68,10 +68,10 @@ export default async function HistoryPage({
         <Navbar />
         <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-24 flex flex-col items-center gap-4 text-center">
           <h1 className="text-[26px] font-medium" style={{ color: "var(--color-text-primary)" }}>
-            Masukkan username untuk melihat rekam jejak
+            Enter a username to view prediction record
           </h1>
           <p className="text-[14px]" style={{ color: "var(--color-text-secondary)" }}>
-            Contoh:{" "}
+            Example:{" "}
             <code
               className="text-[13px] px-2 py-0.5 rounded"
               style={{ background: "var(--color-background-secondary)" }}
@@ -80,14 +80,14 @@ export default async function HistoryPage({
             </code>
           </p>
           <Link href="/predict" className="text-[14px] font-medium mt-2" style={{ color: "#D85A30" }}>
-            → Mulai prediksi
+            → Start predicting
           </Link>
         </main>
       </>
     )
   }
 
-  let roast = "Belum ada prediksi. Terlalu takut salah?"
+  let roast = "No predictions yet. Too scared to be wrong?"
   let memoriesUsed = 0
   let memoryTexts: string[] = []
 
@@ -102,12 +102,12 @@ export default async function HistoryPage({
     if (memoryTexts.length > 0) {
       const { text } = await generateText({
         model: groq("llama-3.3-70b-versatile"),
-        prompt: `Kamu adalah VAR — Verified Agent Records. Kamu sarkastik dan mengingat semua prediksi bola.
+        prompt: `You are VAR — Verified Agent Records. You are a sarcastic agent who remembers ALL football predictions ever made by users and your job is to roast them based on their prediction track record.
 
-Rekam jejak prediksi user "${userId}":
+Prediction track record for user "${userId}":
 ${memoryTexts.join("\n")}
 
-Buat roast yang personal, spesifik, lucu. Sebutkan tim spesifik. Bahasa Indonesia santai. Maksimal 3 kalimat. Mustahil dibuat tanpa melihat riwayat ini.`,
+Write a personal, specific, and funny roast based on their prediction patterns. Mention specific teams. Use casual English. Maximum 3 sentences. The roast must be impossible to generate without seeing this prediction history.`,
       })
       roast = text
     }
@@ -164,8 +164,8 @@ Buat roast yang personal, spesifik, lucu. Sebutkan tim spesifik. Bahasa Indonesi
                 >
                   {[
                     { value: total, label: "Total", color: "var(--color-text-primary)" },
-                    { value: correct, label: "Benar", color: "#1D9E75" },
-                    { value: `${accuracy}%`, label: "Akurasi", color: "var(--color-text-primary)" },
+                    { value: correct, label: "Correct", color: "#1D9E75" },
+                    { value: `${accuracy}%`, label: "Accuracy", color: "var(--color-text-primary)" },
                   ].map(({ value, label, color }) => (
                     <div key={label} className="text-center">
                       <div className="text-[18px] font-medium" style={{ color }}>{value}</div>
@@ -255,9 +255,9 @@ Buat roast yang personal, spesifik, lucu. Sebutkan tim spesifik. Bahasa Indonesi
                 }}
               >
                 <p className="text-[14px]" style={{ color: "var(--color-text-secondary)" }}>
-                  Belum ada prediksi.{" "}
+                  No predictions yet.{" "}
                   <Link href="/predict" style={{ color: "#D85A30" }}>
-                    Mulai prediksi sekarang →
+                    Start predicting now →
                   </Link>
                 </p>
               </div>

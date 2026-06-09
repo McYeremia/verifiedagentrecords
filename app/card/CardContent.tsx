@@ -24,7 +24,7 @@ export default function CardContent() {
         const resolved = correct + wrong
         setStats({ total, correct, wrong, accuracy: resolved > 0 ? Math.round((correct / resolved) * 100) : 0 })
       })
-      .catch(() => setRoast("VAR tidak bisa dihubungi saat ini."))
+      .catch(() => setRoast("VAR is unreachable at the moment."))
       .finally(() => setLoading(false))
   }, [userId])
 
@@ -166,7 +166,7 @@ export default function CardContent() {
               </button>
             </div>
             <p className="text-[12px]" style={{ color: "var(--color-text-tertiary)" }}>
-              Screenshot card di atas untuk share ke X dengan #Walrus
+              Screenshot the card above to share on X with #Walrus
             </p>
           </div>
 
@@ -181,10 +181,10 @@ export default function CardContent() {
             >
               <div>
                 <div className="text-[15px] font-medium mb-1" style={{ color: "var(--color-text-primary)" }}>
-                  Cara share
+                  How to share
                 </div>
                 <p className="text-[13px] leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
-                  Klik <strong>Share on X</strong> untuk posting langsung, atau screenshot card lalu upload manual dengan hashtag #Walrus.
+                  Click <strong>Share on X</strong> to post directly, or screenshot the card and upload manually with the hashtag #Walrus.
                 </p>
               </div>
 
@@ -192,9 +192,9 @@ export default function CardContent() {
 
               <div className="flex flex-col gap-3">
                 {[
-                  { icon: "lock", text: "Semua prediksi tersimpan permanen di Walrus Mainnet" },
-                  { icon: "brain", text: "Roast berdasarkan memori nyata — bukan generik" },
-                  { icon: "speakerphone", text: "Makin banyak prediksi, makin savage verdictnya" },
+                  { icon: "lock", text: "All predictions stored permanently on Walrus Mainnet" },
+                  { icon: "brain", text: "Roasts based on real memory — not generic" },
+                  { icon: "speakerphone", text: "More predictions, more savage the verdict" },
                 ].map(({ icon, text }) => (
                   <div key={icon} className="flex items-start gap-2.5">
                     <div

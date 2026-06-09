@@ -206,7 +206,7 @@ export default function MatchHeroCard({
           }}
         >
           <i className="ti ti-lock" />
-          {isSubmitting ? "Menyimpan..." : "Lock in — VAR is watching"}
+          {isSubmitting ? "Saving..." : "Lock in — VAR is watching"}
         </button>
       </div>
     </div>

@@ -35,8 +35,8 @@ export default function HistoryItem({ matchName, pick, confidence, status, actua
           {matchName}
         </div>
         <div className="text-[12px]" style={{ color: "var(--color-text-secondary)" }}>
-          Pilih: {pick}
-          {actualResult ? ` · Hasil: ${actualResult}` : ""}
+          Pick: {pick}
+          {actualResult ? ` · Result: ${actualResult}` : ""}
         </div>
       </div>
 

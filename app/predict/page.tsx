@@ -8,7 +8,7 @@ function Loading() {
       <Navbar />
       <main className="max-w-[680px] mx-auto w-full px-5 py-8">
         <div className="text-[14px]" style={{ color: "var(--color-text-tertiary)" }}>
-          Memuat...
+          Loading...
         </div>
       </main>
     </>

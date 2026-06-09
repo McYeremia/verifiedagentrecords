@@ -2,12 +2,17 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
+import { useCurrentAccount, ConnectButton } from "@mysten/dapp-kit"
 import Navbar from "../components/Navbar"
 import StatCard from "../components/StatCard"
 import RoastCard from "../components/RoastCard"
 import HistoryItem from "../components/HistoryItem"
 import MatchHeroCard from "../components/MatchHeroCard"
 import type { Match } from "../lib/matches"
+
+function truncateAddress(addr: string) {
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+}
 
 function parseMemories(memories: string[]) {
   const resultMap: Record<string, { isCorrect: boolean; actualWinner: string; score: string }> = {}
@@ -42,7 +47,7 @@ function parseMemories(memories: string[]) {
         predictedWinner: winnerM[1],
         confidence: confM?.[1] ?? "medium",
         status: (result ? (result.isCorrect ? "correct" : "wrong") : "pending") as "correct" | "wrong" | "pending",
-        actualResult: result ? `${result.actualWinner} menang ${result.score}` : undefined,
+        actualResult: result ? `${result.actualWinner} won ${result.score}` : undefined,
       }
     })
     .filter(Boolean) as Array<{
@@ -64,9 +69,9 @@ function computeStats(memories: string[]) {
 
 export default function PredictDashboard() {
   const searchParams = useSearchParams()
+  const account = useCurrentAccount()
+  const userId = account?.address ?? null
 
-  const [userId, setUserId] = useState<string | null>(null)
-  const [userInput, setUserInput] = useState("")
   const [matches, setMatches] = useState<Match[]>([])
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
   const [roast, setRoast] = useState<string | null>(null)
@@ -75,17 +80,6 @@ export default function PredictDashboard() {
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
-
-  useEffect(() => {
-    const urlUserId = searchParams.get("userId")
-    const stored = typeof window !== "undefined" ? localStorage.getItem("var-userId") : null
-    if (urlUserId) {
-      setUserId(urlUserId)
-      localStorage.setItem("var-userId", urlUserId)
-    } else if (stored) {
-      setUserId(stored)
-    }
-  }, [searchParams])
 
   useEffect(() => {
     fetch("/api/matches?upcoming")
@@ -114,7 +108,7 @@ export default function PredictDashboard() {
       setMemoriesUsed(data.memoriesUsed ?? 0)
       setMemories(data.memories ?? [])
     } catch {
-      setRoast("VAR sedang loading verdictnya...")
+      setRoast("VAR is loading its verdict...")
     } finally {
       setLoading(false)
     }
@@ -123,13 +117,6 @@ export default function PredictDashboard() {
   useEffect(() => {
     if (userId) loadRoast()
   }, [userId, loadRoast])
-
-  const handleSetUserId = () => {
-    const trimmed = userInput.trim().toLowerCase().replace(/\s+/g, "_")
-    if (!trimmed) return
-    localStorage.setItem("var-userId", trimmed)
-    setUserId(trimmed)
-  }
 
   const handleSubmitPrediction = async (pick: string, confidence: string) => {
     if (!userId || !selectedMatch) return
@@ -161,48 +148,30 @@ export default function PredictDashboard() {
   const stats = computeStats(memories)
   const predictions = parseMemories(memories)
 
-  // ── Username setup ──────────────────────────────────────────
+  // ── Wallet not connected ────────────────────────────────────
   if (!userId) {
     return (
       <>
         <Navbar />
         <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-24 flex flex-col items-center gap-6 text-center">
           <div
-            className="flex items-center justify-center rounded-full text-white font-medium"
-            style={{ width: 72, height: 72, background: "#D85A30", fontSize: 22 }}
+            className="flex items-center justify-center rounded-full"
+            style={{ width: 72, height: 72, background: "#FAECE7" }}
           >
-            VAR
+            <i className="ti ti-wallet" style={{ fontSize: 32, color: "#D85A30" }} />
           </div>
           <div>
-            <h1 className="text-[28px] font-medium" style={{ color: "var(--color-text-primary)" }}>
-              Siapa nama kamu?
+            <h1 className="text-[26px] font-medium" style={{ color: "var(--color-text-primary)" }}>
+              Connect your Sui wallet to start predicting
             </h1>
-            <p className="text-[14px] mt-2 max-w-xs mx-auto" style={{ color: "var(--color-text-secondary)" }}>
-              Username ini akan jadi identitas rekam jejakmu di Walrus Mainnet.
+            <p className="text-[14px] mt-2 max-w-sm mx-auto" style={{ color: "var(--color-text-secondary)" }}>
+              VAR will remember your predictions permanently on Walrus Mainnet — verified through your wallet address.
             </p>
           </div>
-          <div className="flex gap-2 w-full max-w-sm">
-            <input
-              type="text"
-              placeholder="masukkan username..."
-              value={userInput}
-              onChange={e => setUserInput(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleSetUserId()}
-              className="flex-1 px-4 py-3 rounded-xl text-[14px] outline-none"
-              style={{
-                background: "var(--color-background-secondary)",
-                border: "0.5px solid var(--color-border-tertiary)",
-                color: "var(--color-text-primary)",
-              }}
-            />
-            <button
-              onClick={handleSetUserId}
-              className="px-6 py-3 rounded-xl text-white text-[14px] font-medium"
-              style={{ background: "#D85A30" }}
-            >
-              Masuk
-            </button>
-          </div>
+          <ConnectButton connectText="Connect Sui Wallet" />
+          <p className="text-[12px]" style={{ color: "var(--color-text-tertiary)" }}>
+            No gas fees · Sui Wallet, Suiet, or Phantom supported
+          </p>
         </main>
       </>
     )
@@ -219,7 +188,7 @@ export default function PredictDashboard() {
           <aside className="w-full lg:w-72 xl:w-80 flex-shrink-0">
             <div className="flex flex-col gap-4 lg:sticky lg:top-6">
 
-              {/* User card */}
+              {/* Wallet card */}
               <div
                 className="rounded-xl p-4"
                 style={{
@@ -227,35 +196,26 @@ export default function PredictDashboard() {
                   border: "0.5px solid var(--color-border-tertiary)",
                 }}
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className="flex items-center justify-center rounded-full text-white font-medium flex-shrink-0"
-                      style={{ width: 36, height: 36, background: "#D85A30", fontSize: 13 }}
-                    >
-                      {userId.slice(0, 2).toUpperCase()}
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div
+                    className="flex items-center justify-center rounded-full flex-shrink-0"
+                    style={{ width: 36, height: 36, background: "#FAECE7" }}
+                  >
+                    <i className="ti ti-wallet" style={{ fontSize: 16, color: "#D85A30" }} />
+                  </div>
+                  <div>
+                    <div className="text-[14px] font-medium" style={{ color: "var(--color-text-primary)" }}>
+                      {truncateAddress(userId)}
                     </div>
-                    <div>
-                      <div className="text-[14px] font-medium" style={{ color: "var(--color-text-primary)" }}>
-                        {userId}
-                      </div>
-                      <div className="text-[11px]" style={{ color: "var(--color-text-tertiary)" }}>
-                        World Cup 2026
-                      </div>
+                    <div className="text-[11px]" style={{ color: "var(--color-text-tertiary)" }}>
+                      Sui · World Cup 2026
                     </div>
                   </div>
-                  <button
-                    onClick={() => { localStorage.removeItem("var-userId"); setUserId(null) }}
-                    className="text-[11px]"
-                    style={{ color: "var(--color-text-tertiary)" }}
-                  >
-                    Ganti
-                  </button>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#1D9E75" }} />
                   <span className="text-[11px]" style={{ color: "var(--color-text-tertiary)" }}>
-                    Memory tersimpan di Walrus Mainnet
+                    Memory stored on Walrus Mainnet
                   </span>
                 </div>
               </div>
@@ -263,8 +223,8 @@ export default function PredictDashboard() {
               {/* Stats */}
               <div className="grid grid-cols-3 gap-2">
                 <StatCard value={stats.total} label="Total" variant="neutral" />
-                <StatCard value={stats.correct} label="Benar ✓" variant="correct" />
-                <StatCard value={stats.wrong} label="Salah ✗" variant="wrong" />
+                <StatCard value={stats.correct} label="Correct ✓" variant="correct" />
+                <StatCard value={stats.wrong} label="Wrong ✗" variant="wrong" />
               </div>
 
               {/* Match selector */}
@@ -278,10 +238,16 @@ export default function PredictDashboard() {
                 >
                   <div
                     className="px-4 py-2.5"
-                    style={{ borderBottom: "0.5px solid var(--color-border-tertiary)", background: "var(--color-background-secondary)" }}
+                    style={{
+                      borderBottom: "0.5px solid var(--color-border-tertiary)",
+                      background: "var(--color-background-secondary)",
+                    }}
                   >
-                    <span className="text-[11px] font-medium uppercase tracking-wide" style={{ color: "var(--color-text-tertiary)" }}>
-                      Pilih laga
+                    <span
+                      className="text-[11px] font-medium uppercase tracking-wide"
+                      style={{ color: "var(--color-text-tertiary)" }}
+                    >
+                      Select match
                     </span>
                   </div>
                   {matches.map((m, i) => (
@@ -308,10 +274,13 @@ export default function PredictDashboard() {
                 </div>
               )}
 
-              {/* History (sidebar on desktop) */}
+              {/* History in sidebar */}
               {predictions.length > 0 && (
                 <div>
-                  <div className="text-[13px] font-medium mb-2" style={{ color: "var(--color-text-primary)" }}>
+                  <div
+                    className="text-[11px] font-medium uppercase tracking-wide mb-2"
+                    style={{ color: "var(--color-text-tertiary)" }}
+                  >
                     Prediction history
                   </div>
                   <div
@@ -340,21 +309,22 @@ export default function PredictDashboard() {
           {/* ── Main content ─────────────────────────────────── */}
           <main className="flex-1 flex flex-col gap-6 min-w-0">
 
-            {/* Success notice */}
             {submitted && (
               <div
                 className="rounded-xl p-3 text-[13px] flex items-center gap-2"
                 style={{ background: "#E1F5EE", color: "#1D9E75" }}
               >
                 <i className="ti ti-check" />
-                Prediksi tersimpan di Walrus! VAR sudah mencatat.
+                Prediction saved to Walrus! VAR has taken note.
               </div>
             )}
 
-            {/* Prediction form */}
             {selectedMatch ? (
               <div>
-                <div className="text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--color-text-tertiary)" }}>
+                <div
+                  className="text-[11px] font-medium uppercase tracking-wide mb-2"
+                  style={{ color: "var(--color-text-tertiary)" }}
+                >
                   ⚡ Next match
                 </div>
                 <MatchHeroCard
@@ -373,14 +343,16 @@ export default function PredictDashboard() {
                 }}
               >
                 <p className="text-[14px]" style={{ color: "var(--color-text-secondary)" }}>
-                  Tidak ada laga yang tersedia saat ini.
+                  No matches available at this time.
                 </p>
               </div>
             )}
 
-            {/* VAR Says */}
             <div>
-              <div className="text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--color-text-tertiary)" }}>
+              <div
+                className="text-[11px] font-medium uppercase tracking-wide mb-2"
+                style={{ color: "var(--color-text-tertiary)" }}
+              >
                 💬 VAR says
               </div>
               {loading ? (
@@ -392,7 +364,7 @@ export default function PredictDashboard() {
                   }}
                 >
                   <span className="text-[13px]" style={{ color: "var(--color-text-tertiary)" }}>
-                    Memuat verdict...
+                    Loading verdict...
                   </span>
                 </div>
               ) : roast ? (

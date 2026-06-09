@@ -16,39 +16,39 @@ export async function GET(req: NextRequest) {
 
     if (!userId) {
       return NextResponse.json(
-        { error: "userId wajib diisi" },
+        { error: "userId is required" },
         { status: 400 }
       );
     }
 
     const mem = getMemWal();
 
-    // Ambil semua memori prediksi user dari Walrus
+    // Retrieve all user prediction memories from Walrus
     const memories = await mem.recall({
       query: `User ${userId} predictions results wins losses`,
     });
 
     if (!memories.results || memories.results.length === 0) {
       return NextResponse.json({
-        roast: "Belum ada prediksi sama sekali. Takut salah, ya?",
+        roast: "No predictions yet. Too scared to be wrong?",
         memoriesUsed: 0,
       });
     }
 
-    // Susun konteks dari memori
+    // Build context from memories
     const memoryContext = memories.results
       .map((m: { text: string }) => m.text)
       .join("\n");
 
-    // Generate roast dengan Gemini
+    // Generate roast with Groq
     const { text: roast } = await generateText({
       model: groq("llama-3.3-70b-versatile"),
-      prompt: `Kamu adalah VAR — Verified Agent Records. Kamu adalah agen sarkastik yang mengingat SEMUA prediksi bola yang pernah dibuat user dan tugasmu adalah me-roast mereka berdasarkan rekam jejak prediksi mereka.
+      prompt: `You are VAR — Verified Agent Records. You are a sarcastic agent who remembers ALL football predictions ever made by users and your job is to roast them based on their prediction track record.
 
-Rekam jejak prediksi user "${userId}" dari Walrus Memory:
+Prediction track record for user "${userId}" from Walrus Memory:
 ${memoryContext}
 
-Buat roast yang personal, spesifik, dan lucu berdasarkan pola prediksi mereka. Sebutkan tim-tim spesifik yang mereka prediksi. Gunakan bahasa Indonesia yang santai. Maksimal 3 kalimat. Jangan generik — roast harus mustahil dibuat tanpa melihat riwayat prediksi ini.`,
+Write a personal, specific, and funny roast based on their prediction patterns. Mention specific teams they predicted. Use casual English. Maximum 3 sentences. The roast must be impossible to generate without seeing this prediction history.`,
     });
 
     return NextResponse.json({
@@ -60,7 +60,7 @@ Buat roast yang personal, spesifik, dan lucu berdasarkan pola prediksi mereka. S
   } catch (error) {
     console.error("Error generating roast:", error);
     return NextResponse.json(
-      { error: "Gagal generate roast" },
+      { error: "Failed to generate roast" },
       { status: 500 }
     );
   }

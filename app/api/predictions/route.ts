@@ -8,14 +8,14 @@ export async function POST(req: NextRequest) {
 
     if (!userId || !matchId || !predictedWinner) {
       return NextResponse.json(
-        { error: "userId, matchId, dan predictedWinner wajib diisi" },
+        { error: "userId, matchId, and predictedWinner are required" },
         { status: 400 }
       );
     }
 
     const mem = getMemWal();
 
-    // Teks yang disimpan ke Walrus — ini yang nanti dibaca roast engine
+    // Text stored to Walrus — this is what the roast engine reads later
     const memoryText = `[PREDICTION] User ${userId} predicted ${predictedWinner} to win ${homeTeam} vs ${awayTeam} (matchId: ${matchId}). Confidence: ${confidence || "medium"}. Timestamp: ${new Date().toISOString()}`;
 
     const job = await mem.remember(memoryText);
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Prediksi tersimpan di Walrus",
+      message: "Prediction saved to Walrus",
       blob_id: job.job_id,
       prediction: { userId, matchId, homeTeam, awayTeam, predictedWinner, confidence }
     });
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Error saving prediction:", error);
     return NextResponse.json(
-      { error: "Gagal menyimpan prediksi" },
+      { error: "Failed to save prediction" },
       { status: 500 }
     );
   }

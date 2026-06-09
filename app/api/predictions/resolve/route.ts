@@ -21,14 +21,14 @@ export async function POST(req: NextRequest) {
 
     if (!matchId || !actualWinner || homeScore === undefined || awayScore === undefined) {
       return NextResponse.json(
-        { error: "matchId, actualWinner, homeScore, awayScore wajib diisi" },
+        { error: "matchId, actualWinner, homeScore, awayScore are required" },
         { status: 400 }
       )
     }
 
     const match = getMatchById(matchId)
     if (!match) {
-      return NextResponse.json({ error: "Match tidak ditemukan" }, { status: 404 })
+      return NextResponse.json({ error: "Match not found" }, { status: 404 })
     }
 
     const mem = getMemWal()
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     if (!predictions.results || predictions.results.length === 0) {
       return NextResponse.json({
         success: true,
-        message: "Tidak ada prediksi untuk match ini",
+        message: "No predictions for this match",
         resolved: 0,
       })
     }
@@ -86,6 +86,13 @@ export async function POST(req: NextRequest) {
         (r: { text: string }) => r.text.startsWith("[RESULT]") && r.text.includes(`User ${userId}`)
       ).length
 
+      const filteredResults = (userResults.results || []).filter(
+        (r: { text: string }) => r.text.startsWith("[RESULT]") && r.text.includes(`User ${userId}`)
+      )
+      const userCorrectCount = filteredResults.filter(
+        (r: { text: string }) => r.text.includes("— CORRECT")
+      ).length
+
       let patternGenerated = false
 
       if (resultCount > 0 && resultCount % 3 === 0) {
@@ -97,22 +104,25 @@ export async function POST(req: NextRequest) {
           .map((m: { text: string }) => m.text)
           .join("\n")
 
-        const correctCount = (allMemories.results || []).filter(
-          (r: { text: string }) => r.text.includes("CORRECT") && r.text.includes(userId)
-        ).length
-        const wrongCount = resultCount - correctCount
+        const wrongCount = resultCount - userCorrectCount
 
         const { text: patternInsight } = await generateText({
           model: groq("llama-3.3-70b-versatile"),
-          prompt: `Analisis pola prediksi sepak bola dari user "${userId}" berdasarkan rekam jejak berikut:\n\n${memoryContext}\n\nTulis 1-2 kalimat yang mendeskripsikan pola atau bias prediksi mereka secara spesifik. Fokus pada: tim yang sering mereka jagokan, apakah mereka overestimate atau underestimate tim tertentu, pola keakuratan. Gunakan Bahasa Indonesia santai dan sedikit sarkastik.`,
+          prompt: `Analyze the football prediction patterns of user "${userId}" based on the following track record:\n\n${memoryContext}\n\nWrite 1-2 sentences describing their prediction patterns or biases. Focus on: teams they frequently back, whether they overestimate or underestimate certain teams, accuracy patterns. Use casual English with a slightly sarcastic tone.`,
         })
 
-        const patternText = `[PATTERN] User ${userId} after ${resultCount} predictions: ${correctCount} correct, ${wrongCount} wrong (${Math.round((correctCount / resultCount) * 100)}% accuracy). Pattern analysis: ${patternInsight} Timestamp: ${new Date().toISOString()}`
+        const patternText = `[PATTERN] User ${userId} after ${resultCount} predictions: ${userCorrectCount} correct, ${wrongCount} wrong (${Math.round((userCorrectCount / resultCount) * 100)}% accuracy). Pattern analysis: ${patternInsight} Timestamp: ${new Date().toISOString()}`
 
         const patternJob = await mem.remember(patternText)
         await mem.waitForRememberJob(patternJob.job_id)
         patternGenerated = true
       }
+
+      // Update leaderboard entry for this user
+      const lbAccuracy = resultCount > 0 ? Math.round((userCorrectCount / resultCount) * 100) : 0
+      const leaderboardText = `[LEADERBOARD] User ${userId}: ${resultCount} predictions, ${userCorrectCount} correct, ${lbAccuracy}% accuracy. Last updated: ${new Date().toISOString()}`
+      const lbJob = await mem.remember(leaderboardText)
+      await mem.waitForRememberJob(lbJob.job_id)
 
       summary.push({ userId, correct: isCorrect, patternGenerated })
     }
@@ -127,6 +137,6 @@ export async function POST(req: NextRequest) {
     })
   } catch (error) {
     console.error("Error resolving predictions:", error)
-    return NextResponse.json({ error: "Gagal resolve prediksi" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to resolve predictions" }, { status: 500 })
   }
 }

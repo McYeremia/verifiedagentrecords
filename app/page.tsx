@@ -40,8 +40,8 @@ export default function Home() {
                 <span style={{ color: "#D85A30" }}>Remembered forever.</span>
               </h1>
               <p className="text-[15px] leading-relaxed mt-4" style={{ color: "var(--color-text-secondary)", maxWidth: 480 }}>
-                Simpan prediksi Piala Dunia 2026 kamu di Walrus Mainnet — permanen, tak terhapus.
-                Makin banyak prediksi yang salah, makin savage roast dari VAR.
+                Store your World Cup 2026 predictions on Walrus Mainnet — permanent, immutable.
+                The more wrong calls you make, the more savage VAR&apos;s roasts get.
               </p>
             </div>
 
@@ -100,7 +100,7 @@ export default function Home() {
                 style={{ background: "var(--color-background-secondary)", border: "0.5px solid var(--color-border-tertiary)" }}
               >
                 <p className="text-[14px]" style={{ color: "var(--color-text-secondary)" }}>
-                  Semua prediksi sudah dikunci. Tunggu laga berikutnya.
+                  All predictions are locked in. Wait for the next match.
                 </p>
               </div>
             )}
@@ -121,10 +121,10 @@ export default function Home() {
             </h2>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <FeatureCard icon="lock" title="Lock your call" description="Prediksi kamu disimpan ke Walrus Mainnet — permanen, tidak bisa dihapus." iconVariant="coral" />
-            <FeatureCard icon="brain" title="VAR remembers" description="Setiap prediksi dan hasil diingat lintas sesi. VAR tidak pernah lupa." iconVariant="teal" />
-            <FeatureCard icon="speakerphone" title="Get roasted" description="Makin banyak data, makin savage roast-nya. Hari pertama sopan, hari ke-4 habis." iconVariant="amber" />
-            <FeatureCard icon="share" title="Share the shame" description="Export roast card dan posting ke X dengan #Walrus. Let them know." iconVariant="blue" />
+            <FeatureCard icon="lock" title="Lock your call" description="Your prediction is stored on Walrus Mainnet — permanent, immutable, undeletable." iconVariant="coral" />
+            <FeatureCard icon="brain" title="VAR remembers" description="Every prediction and result is remembered across sessions. VAR never forgets." iconVariant="teal" />
+            <FeatureCard icon="speakerphone" title="Get roasted" description="More data means more savage roasts. Day 1 is polite, Day 4 is brutal." iconVariant="amber" />
+            <FeatureCard icon="share" title="Share the shame" description="Export your roast card and post it to X with #Walrus. Let them know." iconVariant="blue" />
           </div>
         </section>
 
@@ -142,7 +142,7 @@ export default function Home() {
               VAR is not impressed
             </h2>
             <RoastCard
-              roast="Belum ada prediksi sama sekali. Takut ketahuan salah, ya? Lock in dulu baru ngomong."
+              roast="No predictions at all. Too scared to be proven wrong? Lock in first, then talk."
               memoriesUsed={0}
             />
           </div>
@@ -168,7 +168,7 @@ export default function Home() {
             Ready to be judged?
           </h2>
           <p className="text-[15px] max-w-md" style={{ color: "var(--color-text-secondary)" }}>
-            Kickoff sudah dekat. Prediksi sekarang sebelum terlambat — dan biarkan VAR mengingat semua kesalahanmu.
+            Kickoff is approaching. Predict now before it&apos;s too late — and let VAR remember every wrong call you make.
           </p>
           <Link
             href="/predict"

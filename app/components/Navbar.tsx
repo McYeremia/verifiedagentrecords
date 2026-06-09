@@ -1,4 +1,7 @@
+"use client"
+
 import Link from "next/link"
+import { ConnectButton } from "@mysten/dapp-kit"
 
 export default function Navbar() {
   return (
@@ -32,19 +35,24 @@ export default function Navbar() {
           <Link href="/history" className="text-[13px]" style={{ color: "var(--color-text-secondary)" }}>
             History
           </Link>
-          <Link href="#" className="text-[13px]" style={{ color: "var(--color-text-secondary)" }}>
+          <Link href="/leaderboard" className="text-[13px]" style={{ color: "var(--color-text-secondary)" }}>
             Leaderboard
           </Link>
         </div>
 
-        <Link
-          href="/predict"
-          className="inline-flex items-center gap-2 text-white text-[13px] font-medium"
-          style={{ background: "#D85A30", padding: "8px 18px", borderRadius: 99 }}
-        >
-          <i className="ti ti-lock" style={{ fontSize: 12 }} />
-          Start predicting
-        </Link>
+        <ConnectButton
+          connectText="Connect Sui Wallet"
+          style={{
+            background: "#D85A30",
+            color: "white",
+            borderRadius: "99px",
+            fontSize: "13px",
+            fontWeight: "500",
+            padding: "8px 16px",
+            border: "none",
+            cursor: "pointer",
+          }}
+        />
       </div>
     </nav>
   )
