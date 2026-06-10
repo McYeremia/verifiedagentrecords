@@ -56,6 +56,12 @@ const CONFIDENCE_OPTIONS = [
   { value: "all-in", label: "All in (Max)" },
 ]
 
+const STAGES = [
+  { icon: "ti-cloud-upload", text: "Sending to Walrus...",         ms: 2200 },
+  { icon: "ti-brain",        text: "VAR is reviewing your file...", ms: 2800 },
+  { icon: "ti-sparkles",     text: "Generating your verdict...",    ms: 99999 },
+]
+
 export default function MatchHeroCard({
   match,
   redirectOnSubmit = true,
@@ -67,6 +73,35 @@ export default function MatchHeroCard({
   const router = useRouter()
   const [pick, setPick] = useState<string | null>(null)
   const [confidence, setConfidence] = useState("medium")
+  const [stageIdx, setStageIdx] = useState(0)
+  const [progress, setProgress] = useState(0)
+
+  useEffect(() => {
+    if (!isSubmitting) { setStageIdx(0); setProgress(0); return }
+
+    // advance through stages at the timing defined above
+    let idx = 0
+    setStageIdx(0)
+    const timers: ReturnType<typeof setTimeout>[] = []
+    let elapsed = 0
+    for (const stage of STAGES.slice(0, -1)) {
+      elapsed += stage.ms
+      timers.push(setTimeout(() => { idx++; setStageIdx(idx) }, elapsed))
+    }
+
+    // smooth progress bar over ~9 s (slightly longer than typical response so it never "completes" early)
+    const TOTAL_MS = 9000
+    const TICK_MS  = 80
+    let ticks = 0
+    const prog = setInterval(() => {
+      ticks++
+      const raw = ticks * TICK_MS / TOTAL_MS
+      // ease-out curve so it slows near the end and never fully reaches 100
+      setProgress(Math.min(raw < 0.85 ? raw : 0.85 + (raw - 0.85) * 0.15, 0.97))
+    }, TICK_MS)
+
+    return () => { timers.forEach(clearTimeout); clearInterval(prog) }
+  }, [isSubmitting])
 
   const handleSubmit = async () => {
     if (!pick) return
@@ -245,20 +280,49 @@ export default function MatchHeroCard({
           </div>
         </div>
 
-        {/* Submit button */}
-        <button
-          onClick={handleSubmit}
-          disabled={!pick || isSubmitting}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-full text-white text-[14px] font-medium transition-all duration-300 active:scale-[0.98] hover:shadow-lg hover:shadow-blue-500/20"
-          style={{
-            background: "#3B82F6",
-            opacity: !pick ? 0.45 : 1,
-            cursor: !pick ? "not-allowed" : "pointer",
-          }}
-        >
-          <i className="ti ti-lock" />
-          {isSubmitting ? "Saving..." : "Lock in — VAR is watching"}
-        </button>
+        {/* Submit button + progress */}
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={handleSubmit}
+            disabled={!pick || isSubmitting}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-full text-white text-[14px] font-medium transition-all duration-300 active:scale-[0.98] hover:shadow-lg hover:shadow-blue-500/20"
+            style={{
+              background: isSubmitting ? "rgba(59,130,246,0.70)" : "#3B82F6",
+              opacity: !pick && !isSubmitting ? 0.45 : 1,
+              cursor: !pick || isSubmitting ? "not-allowed" : "pointer",
+            }}
+          >
+            {isSubmitting ? (
+              <>
+                <i
+                  className={`ti ${STAGES[stageIdx].icon} text-[15px] transition-all duration-300`}
+                  style={{ animationDuration: stageIdx === 0 ? "0.9s" : undefined }}
+                />
+                <span className="transition-all duration-300">{STAGES[stageIdx].text}</span>
+              </>
+            ) : (
+              <>
+                <i className="ti ti-lock" />
+                <span>Lock in — VAR is watching</span>
+              </>
+            )}
+          </button>
+
+          {/* Progress bar — only visible while submitting */}
+          <div
+            className="w-full rounded-full overflow-hidden transition-all duration-300"
+            style={{ height: isSubmitting ? 3 : 0, background: "rgba(255,255,255,0.08)" }}
+          >
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${progress * 100}%`,
+                background: "linear-gradient(90deg, #3B82F6, #60A5FA)",
+                transition: "width 0.08s linear",
+              }}
+            />
+          </div>
+        </div>
         </>
         )}
       </div>

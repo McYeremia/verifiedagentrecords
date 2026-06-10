@@ -11,6 +11,37 @@ function truncateAddress(addr: string) {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
 }
 
+function getShareCaption(stats: { total: number; accuracy: number }): string {
+  const { total, accuracy } = stats
+  const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]
+
+  if (total < 3) return pick([
+    "VAR just opened my file. I'm not ready for what it found. 👀 #Walrus #WorldCup2026",
+    "Starting my World Cup 2026 prediction record on Walrus. VAR is watching. 👁️ #Walrus #WorldCup2026",
+  ])
+
+  if (accuracy >= 70) return pick([
+    `VAR checked my record. Turns out I actually know football. 🎯 #Walrus #WorldCup2026`,
+    `${accuracy}% accuracy. VAR can't roast what it respects. 😤 #Walrus #WorldCup2026`,
+    `VAR tried to roast me but the numbers didn't cooperate 🏆 #Walrus #WorldCup2026`,
+    ...(total >= 10 ? [`${total} predictions in. ${accuracy}% accurate. VAR is begrudgingly impressed. #Walrus #WorldCup2026`] : []),
+  ])
+
+  if (accuracy < 40) return pick([
+    `VAR just exposed me and I have no defense 💀 #Walrus #WorldCup2026`,
+    `${total} predictions. VAR is not impressed. Not even a little. 😭 #Walrus #WorldCup2026`,
+    `I pick wrong teams so you don't have to. VAR has the receipts. #Walrus #WorldCup2026`,
+    `VAR remembers every wrong call I made 😭 #Walrus #WorldCup2026`,
+  ])
+
+  return pick([
+    `VAR has my receipts and honestly... it's complicated 😅 #Walrus #WorldCup2026`,
+    `Some good calls. Some bad calls. VAR remembers all of them. #Walrus #WorldCup2026`,
+    `VAR remembers every wrong call I made 😭 #Walrus #WorldCup2026`,
+    ...(total >= 10 ? [`${total} predictions logged on Walrus. The truth hurts. 😬 #Walrus #WorldCup2026`] : []),
+  ])
+}
+
 export default function CardContent() {
   const searchParams  = useSearchParams()
   const account       = useCurrentAccount()
@@ -24,6 +55,8 @@ export default function CardContent() {
   const [downloading, setDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState(false)
   const [shareUrl, setShareUrl] = useState("#")
+  const [sharing, setSharing] = useState(false)
+  const [shareReady, setShareReady] = useState(false)
 
   useEffect(() => {
     if (!userId) return
@@ -60,13 +93,36 @@ export default function CardContent() {
 
   const truncated = userId ? truncateAddress(userId) : ""
 
-  // Compute share URL client-side only — avoids SSR/client hydration mismatch
-  useEffect(() => {
-    if (!userId) return
-    const text    = encodeURIComponent(`VAR verdict: "${roast.slice(0, 120)}..." #Walrus #WorldCup2026`)
+
+  const shareToX = async () => {
+    if (!userId || sharing) return
+    setSharing(true)
+    setShareReady(false)
+    try {
+      // Download OG image in the background
+      const params = new URLSearchParams({ userId, roast: roast.slice(0, 800) })
+      const res = await fetch(`/api/og?${params.toString()}`)
+      if (res.ok) {
+        const blob = await res.blob()
+        const a = document.createElement("a")
+        a.href = URL.createObjectURL(blob)
+        a.download = `var-${truncated}.png`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(a.href)
+      }
+    } catch { /* non-critical — still open X */ } finally {
+      setSharing(false)
+      setShareReady(true)
+      setTimeout(() => setShareReady(false), 4000)
+    }
+    // Build tweet URL fresh at click time so caption reflects current stats
+    const caption = getShareCaption(stats)
     const cardUrl = `${window.location.origin}/card?userId=${encodeURIComponent(userId)}`
-    setShareUrl(`https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(cardUrl)}`)
-  }, [userId, roast])
+    const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(caption)}&url=${encodeURIComponent(cardUrl)}`
+    window.open(tweetUrl, "_blank", "noopener,noreferrer")
+  }
 
   const downloadCard = async () => {
     if (!userId || downloading) return
@@ -231,16 +287,15 @@ export default function CardContent() {
 
               {/* Action buttons */}
               <div className="flex gap-3 flex-wrap justify-center">
-                <a
-                  href={shareUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group inline-flex items-center gap-2.5 text-white text-[14px] font-semibold transition-all duration-300 active:scale-[0.97] hover:shadow-lg hover:shadow-[#3B82F6]/20"
+                <button
+                  onClick={shareToX}
+                  disabled={sharing || !roast}
+                  className="group inline-flex items-center gap-2.5 text-white text-[14px] font-semibold transition-all duration-300 active:scale-[0.97] hover:shadow-lg hover:shadow-[#3B82F6]/20 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ background: "#3B82F6", padding: "11px 26px", borderRadius: 99 }}
                 >
-                  <i className="ti ti-share transition-transform group-hover:rotate-12" />
-                  Share on X
-                </a>
+                  <i className={`ti ${sharing ? "ti-loader animate-slow-spin" : "ti-share"} transition-transform group-hover:rotate-12`} />
+                  {sharing ? "Preparing..." : "Share on X"}
+                </button>
                 <button
                   onClick={downloadCard}
                   disabled={downloading}
@@ -259,14 +314,18 @@ export default function CardContent() {
                 </button>
               </div>
 
-              {downloadError ? (
+              {shareReady ? (
+                <p className="text-[12px] text-center max-w-sm animate-fade-in-up" style={{ color: "#34D399" }}>
+                  Card image saved — attach it to the tweet that just opened.
+                </p>
+              ) : downloadError ? (
                 <p className="text-[12px] text-center max-w-sm" style={{ color: "#EF4444" }}>
                   Download failed — screenshot the card above instead.
                 </p>
               ) : (
                 <p className="text-[12px] text-neutral-500 select-none text-center max-w-sm">
-                  <span className="text-neutral-400 font-semibold">Share on X</span> attaches a link preview with your verdict.{" "}
-                  <span className="text-neutral-400 font-semibold">Save image</span> downloads as PNG.
+                  <span className="text-neutral-400 font-semibold">Share on X</span> downloads the card image and opens X — attach the image to the tweet.{" "}
+                  <span className="text-neutral-400 font-semibold">Save image</span> downloads as PNG only.
                 </p>
               )}
             </div>
@@ -280,7 +339,7 @@ export default function CardContent() {
                 <div>
                   <div className="text-[15px] font-semibold mb-1 text-white">How to share</div>
                   <p className="text-[13px] leading-relaxed text-neutral-400">
-                    Click <strong className="text-neutral-300">Share on X</strong> to post directly, or <strong className="text-neutral-300">Save image</strong> to download as PNG and upload manually with <strong className="text-neutral-300">#Walrus</strong>.
+                    Click <strong className="text-neutral-300">Share on X</strong> — the card image downloads automatically and X opens. Attach the image to the tweet, then post with <strong className="text-neutral-300">#Walrus</strong>.
                   </p>
                 </div>
 

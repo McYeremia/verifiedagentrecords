@@ -42,6 +42,7 @@ function parseMemories(memories: string[]) {
       const winnerM = text.match(/predicted (.+?) to win/)
       const teamsM = text.match(/to win (.+?) \(matchId/)
       const confM = text.match(/Confidence: (\w+)/)
+      const tsM = text.match(/Timestamp: ([\d\-T:.Z]+)/)
       if (!midM || !winnerM) return null
       const matchId = midM[1]
       const result = resultMap[matchId]
@@ -52,15 +53,18 @@ function parseMemories(memories: string[]) {
         confidence: confM?.[1] ?? "medium",
         status: (result ? (result.isCorrect ? "correct" : "wrong") : "pending") as "correct" | "wrong" | "pending",
         actualResult: result ? `${result.actualWinner} won ${result.score}` : undefined,
+        ts: tsM ? new Date(tsM[1]).getTime() : 0,
       }
     })
-    .filter(Boolean) as Array<{
+    .filter(Boolean)
+    .sort((a, b) => b!.ts - a!.ts) as Array<{
       matchId: string
       matchName: string
       predictedWinner: string
       confidence: string
       status: "correct" | "wrong" | "pending"
       actualResult?: string
+      ts: number
     }>
 }
 
@@ -87,6 +91,7 @@ export default function PredictDashboard() {
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [lastSubmit, setLastSubmit] = useState<{ match: Match; pick: string } | null>(null)
   const [pickStat, setPickStat] = useState<string | null>(null)
   // matchId → pick for matches this user has already predicted (device-local cache).
   // Merged with memory-derived predictions to lock each match (one prediction, forever).
@@ -229,6 +234,7 @@ export default function PredictDashboard() {
           knowsYou?: { total: number; hits: number; knowsYouPct: number }
         }))
         setSubmitted(true)
+        setLastSubmit({ match: selectedMatch, pick })
         setPickStat(null)
         rememberLocalPick(selectedMatch.id, pick)
         // Pre-Cog reveal — did VAR call your pick before you made it?
@@ -374,6 +380,28 @@ export default function PredictDashboard() {
                       </span>
                     </div>
                   )}
+
+                  {/* Share pick on X */}
+                  {lastSubmit && userId && (() => {
+                    const { match, pick } = lastSubmit
+                    const caption = encodeURIComponent(
+                      `I just backed ${getTLA(pick)} to win ${match.homeTeam} vs ${match.awayTeam} — VAR has recorded it forever 🎯 #Walrus #WorldCup2026`
+                    )
+                    const cardUrl = encodeURIComponent(`${window.location.origin}/card?userId=${encodeURIComponent(userId)}`)
+                    const tweetUrl = `https://twitter.com/intent/tweet?text=${caption}&url=${cardUrl}`
+                    return (
+                      <a
+                        href={tweetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-2xl p-3.5 text-[13px] font-medium flex items-center gap-2 border border-white/10 transition-colors duration-200 hover:border-white/20 hover:bg-white/[0.04]"
+                        style={{ background: "rgba(255,255,255,0.02)", color: "rgba(255,255,255,0.50)" }}
+                      >
+                        <i className="ti ti-share text-[15px] flex-shrink-0" />
+                        <span>Share your pick on X</span>
+                      </a>
+                    )
+                  })()}
                 </div>
               )}
 
@@ -604,7 +632,7 @@ export default function PredictDashboard() {
                                 setSelectedGroup(g)
                                 const first = allMatches.find(m => m.group === g) ?? null
                                 setSelectedMatch(first)
-                                setSubmitted(false); setPickStat(null); setReveal(null)
+                                setSubmitted(false); setLastSubmit(null); setPickStat(null); setReveal(null)
                               }}
                               className="flex items-center justify-center py-1.5 rounded-lg text-[12px] font-bold transition-all duration-150 active:scale-95"
                               style={{
@@ -629,7 +657,7 @@ export default function PredictDashboard() {
                         {groupMatches.map((m, i) => (
                           <button
                             key={m.id}
-                            onClick={() => { setSelectedMatch(m); setSubmitted(false); setPickStat(null); setReveal(null) }}
+                            onClick={() => { setSelectedMatch(m); setSubmitted(false); setLastSubmit(null); setPickStat(null); setReveal(null) }}
                             className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
                             style={{
                               borderBottom: i < groupMatches.length - 1 ? "0.5px solid rgba(255, 255, 255, 0.05)" : undefined,
@@ -675,28 +703,47 @@ export default function PredictDashboard() {
 
                 {/* History in sidebar */}
                 {predictions.length > 0 && (
-                  <div className="space-y-2">
-                    <div
-                      className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400"
-                    >
-                      Prediction history
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+                        <i className="ti ti-history text-[#3B82F6]" style={{ fontSize: 11 }} />
+                        Prediction history
+                      </div>
+                      <div className="flex items-center gap-1 text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>
+                        <i className="ti ti-sort-descending text-[10px]" />
+                        Newest first
+                      </div>
                     </div>
                     <div
-                      className="rounded-2xl px-4 py-1.5 border border-white/10 backdrop-blur-xl"
-                      style={{
-                        background: "rgba(255, 255, 255, 0.03)",
-                      }}
+                      className="rounded-2xl border border-white/10 backdrop-blur-xl overflow-hidden"
+                      style={{ background: "rgba(255,255,255,0.03)" }}
                     >
-                      {predictions.map((pred, i) => (
-                        <HistoryItem
-                          key={i}
-                          matchName={pred.matchName}
-                          pick={pred.predictedWinner}
-                          confidence={pred.confidence}
-                          status={pred.status}
-                          actualResult={pred.actualResult}
-                        />
-                      ))}
+                      <div
+                        className="overflow-y-auto scrollbar-hide px-4 py-1.5"
+                        style={{ maxHeight: 300 }}
+                      >
+                        {predictions.map((pred, i) => (
+                          <HistoryItem
+                            key={i}
+                            matchName={pred.matchName}
+                            pick={pred.predictedWinner}
+                            confidence={pred.confidence}
+                            status={pred.status}
+                            actualResult={pred.actualResult}
+                          />
+                        ))}
+                      </div>
+                      {predictions.length > 4 && (
+                        <div
+                          className="text-center py-1.5 text-[10px]"
+                          style={{
+                            color: "rgba(255,255,255,0.20)",
+                            borderTop: "0.5px solid rgba(255,255,255,0.05)",
+                          }}
+                        >
+                          {predictions.length} predictions total
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
