@@ -15,6 +15,32 @@ export async function POST(req: NextRequest) {
 
     const mem = getMemWal();
 
+    // One prediction per match, locked forever — reject any re-prediction.
+    // This is the authoritative guard; the UI lock is just UX on top of it.
+    const existing = await mem.recall({
+      query: `PREDICTION User ${userId} matchId ${matchId} predicted to win`,
+    });
+    const already = (existing.results || [])
+      .map((m: { text: string }) => m.text)
+      .find(
+        (t: string) =>
+          t.startsWith("[PREDICTION]") &&
+          t.includes(userId) &&
+          t.includes(`(matchId: ${matchId})`)
+      );
+    if (already) {
+      const winnerM = already.match(/predicted (.+?) to win/);
+      return NextResponse.json(
+        {
+          error: "already_predicted",
+          message: "You already predicted this match. VAR locks every call forever.",
+          predictedWinner: winnerM?.[1] ?? null,
+          matchId,
+        },
+        { status: 409 }
+      );
+    }
+
     // Text stored to Walrus — this is what the roast engine reads later
     const memoryText = `[PREDICTION] User ${userId} predicted ${predictedWinner} to win ${homeTeam} vs ${awayTeam} (matchId: ${matchId}). Confidence: ${confidence || "medium"}. Timestamp: ${new Date().toISOString()}`;
 

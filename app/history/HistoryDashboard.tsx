@@ -413,6 +413,22 @@ export default function HistoryDashboard() {
   const [roastTs, setRoastTs]           = useState<number | null>(null)
   const [loading, setLoading]           = useState(false)
   const [snapshotsLoading, setSnapshotsLoading] = useState(false)
+  const [calibration, setCalibration]   = useState<{
+    buckets: { level: string; label: string; total: number; correct: number; accuracy: number }[]
+    resolvedCount: number
+    verdict: string | null
+    overconfident: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    if (!userId) { setCalibration(null); return }
+    let cancelled = false
+    fetch(`/api/profile?userId=${encodeURIComponent(userId)}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled && d.calibration) setCalibration(d.calibration) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [userId])
 
   useEffect(() => {
     if (!userId) return
@@ -623,6 +639,42 @@ export default function HistoryDashboard() {
                   </div>
                 )}
               </div>
+
+              {/* Overconfidence index (#2) */}
+              {calibration && calibration.resolvedCount > 0 && (
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider mb-2 text-neutral-400 flex items-center gap-1.5 select-none">
+                    <i className="ti ti-gauge text-[#FCD34D]" />
+                    Overconfidence index
+                    <Link href={`/profile?userId=${encodeURIComponent(userId!)}`} className="ml-auto text-[10px] font-medium transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.30)" }}>
+                      Full profile →
+                    </Link>
+                  </div>
+                  <div className="rounded-2xl p-5 border border-white/10" style={{ background: "rgba(255,255,255,0.03)" }}>
+                    <div className="flex flex-col gap-3">
+                      {calibration.buckets.map(b => {
+                        const col = b.accuracy >= 60 ? "#1D9E75" : b.accuracy >= 40 ? "#93C5FD" : "#F87171"
+                        return (
+                          <div key={b.level} className="flex items-center gap-3">
+                            <span className="text-[12px] w-16 flex-shrink-0" style={{ color: "rgba(255,255,255,0.55)" }}>{b.label}</span>
+                            <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+                              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${b.accuracy}%`, background: col }} />
+                            </div>
+                            <span className="text-[12px] font-semibold tabular-nums w-20 text-right flex-shrink-0" style={{ color: col }}>
+                              {b.accuracy}% <span className="text-neutral-500 font-normal">({b.total})</span>
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {calibration.verdict && (
+                      <p className="text-[13px] leading-relaxed mt-4 pt-4 border-t border-white/5 italic" style={{ color: calibration.overconfident ? "#FCD34D" : "rgba(255,255,255,0.55)" }}>
+                        &ldquo;{calibration.verdict}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Unified timeline */}
               <div>

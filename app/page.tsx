@@ -42,7 +42,7 @@ export default function Home() {
 
   return (
     <>
-      <Navbar dark />
+      <Navbar />
 
       {/* Single unified background — no hard section breaks */}
       <div style={{ background: "#060C18", color: "white", position: "relative", overflow: "hidden" }}>

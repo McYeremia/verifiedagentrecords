@@ -11,6 +11,8 @@ interface MatchHeroCardProps {
   redirectOnSubmit?: boolean
   onSubmit?: (pick: string, confidence: string) => Promise<void>
   isSubmitting?: boolean
+  alreadyPredicted?: boolean
+  existingPick?: string | null
 }
 
 function Countdown({ targetDate }: { targetDate: string }) {
@@ -59,6 +61,8 @@ export default function MatchHeroCard({
   redirectOnSubmit = true,
   onSubmit,
   isSubmitting,
+  alreadyPredicted = false,
+  existingPick = null,
 }: MatchHeroCardProps) {
   const router = useRouter()
   const [pick, setPick] = useState<string | null>(null)
@@ -73,10 +77,7 @@ export default function MatchHeroCard({
     }
   }
 
-  const teams = [
-    { team: match.homeTeam, flag: match.homeFlag },
-    { team: match.awayTeam, flag: match.awayFlag },
-  ]
+  const teams = [match.homeTeam, match.awayTeam]
 
   return (
     <div
@@ -131,9 +132,48 @@ export default function MatchHeroCard({
           </div>
         </div>
 
+        {alreadyPredicted ? (
+        /* Locked — one prediction per match, forever */
+        <div
+          className="flex flex-col items-center gap-3 py-6 rounded-xl text-center"
+          style={{
+            background: "rgba(59,130,246,0.06)",
+            border: "1px solid rgba(59,130,246,0.22)",
+          }}
+        >
+          <div
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-full uppercase tracking-wide"
+            style={{
+              background: "rgba(59,130,246,0.12)",
+              color: "#93C5FD",
+              border: "0.5px solid rgba(59,130,246,0.22)",
+            }}
+          >
+            <i className="ti ti-lock" style={{ fontSize: 10 }} />
+            Prediction locked
+          </div>
+          {existingPick && (
+            <div className="flex items-center gap-2.5">
+              {existingPick !== "Draw" && <FlagImg team={existingPick} height={28} />}
+              <div className="text-left">
+                <div className="text-[18px] font-bold text-white tracking-widest leading-tight">
+                  {existingPick === "Draw" ? "DRAW" : getTLA(existingPick)}
+                </div>
+                {existingPick !== "Draw" && (
+                  <div className="text-[11px] text-neutral-400">{existingPick}</div>
+                )}
+              </div>
+            </div>
+          )}
+          <p className="text-[12px] max-w-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.40)" }}>
+            You already called this one. VAR keeps every prediction on record — no take-backs.
+          </p>
+        </div>
+        ) : (
+        <>
         {/* Pick buttons */}
         <div className="grid grid-cols-2 gap-2">
-          {teams.map(({ team, flag }) => {
+          {teams.map((team) => {
             const selected = pick === team
             return (
               <button
@@ -219,6 +259,8 @@ export default function MatchHeroCard({
           <i className="ti ti-lock" />
           {isSubmitting ? "Saving..." : "Lock in — VAR is watching"}
         </button>
+        </>
+        )}
       </div>
     </div>
   )

@@ -24,23 +24,46 @@ export default function ChampionDashboard() {
   const [lockedAt, setLockedAt] = useState<string | null>(null)
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [checking, setChecking] = useState(false)
 
   useEffect(() => {
     if (!userId) return
-    setChecking(true)
+
+    // Reset so a wallet switch never shows the previous account's pick.
     setCurrentPick(null)
     setLockedAt(null)
+
+    // A champion pick is locked forever (immutable), so once we know it we can
+    // cache it permanently — returning users see their pick instantly, with no
+    // Walrus round-trip and no loading state on screen.
+    try {
+      const hit = localStorage.getItem(`var-champion-${userId}`)
+      if (hit) {
+        const cached = JSON.parse(hit)
+        if (cached?.pick) {
+          setCurrentPick(cached.pick)
+          setLockedAt(cached.lockedAt ?? null)
+          return
+        }
+      }
+    } catch { /* ignore localStorage errors */ }
+
+    // No cache — check Walrus silently in the background (no visible loader).
+    let cancelled = false
     fetch(`/api/champion?userId=${encodeURIComponent(userId)}`)
       .then(r => r.json())
       .then(data => {
-        if (data.pick) {
-          setCurrentPick(data.pick)
-          setLockedAt(data.lockedAt ?? null)
-        }
+        if (cancelled || !data.pick) return
+        setCurrentPick(data.pick)
+        setLockedAt(data.lockedAt ?? null)
+        try {
+          localStorage.setItem(
+            `var-champion-${userId}`,
+            JSON.stringify({ pick: data.pick, lockedAt: data.lockedAt ?? null }),
+          )
+        } catch { /* ignore */ }
       })
       .catch(() => {})
-      .finally(() => setChecking(false))
+    return () => { cancelled = true }
   }, [userId])
 
   const handleLockIn = async () => {
@@ -53,8 +76,15 @@ export default function ChampionDashboard() {
         body: JSON.stringify({ userId, team: selectedTeam }),
       })
       if (res.ok) {
+        const at = new Date().toISOString()
         setCurrentPick(selectedTeam)
-        setLockedAt(new Date().toISOString())
+        setLockedAt(at)
+        try {
+          localStorage.setItem(
+            `var-champion-${userId}`,
+            JSON.stringify({ pick: selectedTeam, lockedAt: at }),
+          )
+        } catch { /* ignore */ }
       }
     } finally {
       setSubmitting(false)
@@ -99,8 +129,8 @@ export default function ChampionDashboard() {
     )
   }
 
-  // Already locked in — show pick (only render after check is done to avoid flicker)
-  if (!checking && currentPick) {
+  // Already locked in — show pick (instant for cached users, no loading state)
+  if (currentPick) {
     return (
       <>
         <Navbar />
@@ -187,7 +217,7 @@ export default function ChampionDashboard() {
         <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 pb-32 relative" style={{ zIndex: 1 }}>
 
           {/* Header */}
-          <div className="text-center mb-14">
+          <div className="text-center mb-14 animate-fade-in-up">
             <div
               className="text-[11px] font-semibold uppercase tracking-widest mb-5"
               style={{ color: "rgba(255,255,255,0.22)" }}
@@ -203,20 +233,9 @@ export default function ChampionDashboard() {
             </p>
           </div>
 
-          {/* Checking indicator — inline, not a blocker */}
-          {checking && (
-            <div className="flex items-center justify-center gap-2 mb-6">
-              <i className="ti ti-loader animate-slow-spin text-[13px]" style={{ color: "rgba(255,255,255,0.25)" }} />
-              <span className="text-[12px]" style={{ color: "rgba(255,255,255,0.25)" }}>
-                Checking if you already picked...
-              </span>
-            </div>
-          )}
-
-          {/* Team grid — rendered immediately, interactions disabled while checking */}
+          {/* Team grid — rendered immediately */}
           <div
-            className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2.5 mb-10 transition-opacity duration-300"
-            style={{ opacity: checking ? 0.45 : 1, pointerEvents: checking ? "none" : "auto" }}
+            className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2.5 mb-10 animate-fade-in-up delay-100"
           >
             {TEAMS.map(team => {
               const isSelected = selectedTeam === team.name
@@ -277,7 +296,7 @@ export default function ChampionDashboard() {
                 </div>
                 <button
                   onClick={handleLockIn}
-                  disabled={submitting || checking}
+                  disabled={submitting}
                   className="inline-flex items-center gap-2 text-white text-[13px] font-medium transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-50"
                   style={{ background: "#3B82F6", padding: "11px 28px", borderRadius: 99 }}
                 >
@@ -285,7 +304,7 @@ export default function ChampionDashboard() {
                     className={`ti ${submitting ? "ti-loader animate-slow-spin" : "ti-lock"}`}
                     style={{ fontSize: 14 }}
                   />
-                  {submitting ? "Locking in..." : checking ? "Verifying..." : "Lock in forever"}
+                  {submitting ? "Locking in..." : "Lock in forever"}
                 </button>
               </>
             ) : (
@@ -293,7 +312,7 @@ export default function ChampionDashboard() {
                 className="text-[13px] mx-auto text-center"
                 style={{ color: "rgba(255,255,255,0.30)" }}
               >
-                {checking ? "Checking your existing pick..." : "Select a team above to lock in your pick"}
+                Select a team above to lock in your pick
               </p>
             )}
           </div>

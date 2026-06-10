@@ -87,6 +87,47 @@ export default function PredictDashboard() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [pickStat, setPickStat] = useState<string | null>(null)
+  // matchId → pick for matches this user has already predicted (device-local cache).
+  // Merged with memory-derived predictions to lock each match (one prediction, forever).
+  const [localPicks, setLocalPicks] = useState<Record<string, string>>({})
+
+  // VAR Pre-Cog state
+  const [precog, setPrecog] = useState<
+    { ready: boolean; pick?: string; line?: string; remaining?: number } | null
+  >(null)
+  const [precogLoading, setPrecogLoading] = useState(false)
+  const [reveal, setReveal] = useState<{ hit: boolean; pick: string } | null>(null)
+  const [knowsYou, setKnowsYou] = useState<{ total: number; hits: number; knowsYouPct: number } | null>(null)
+
+  const loadKnowsYou = useCallback(() => {
+    if (!userId) { setKnowsYou(null); return }
+    fetch(`/api/precog?userId=${encodeURIComponent(userId)}`)
+      .then(r => r.json())
+      .then(d => { if (d.scoreboard) setKnowsYou(d) })
+      .catch(() => {})
+  }, [userId])
+
+  // Always land at the top — arriving with ?match= from the landing page can
+  // otherwise leave the scroll position mid/bottom of the page.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
+  useEffect(() => {
+    if (!userId) { setLocalPicks({}); return }
+    try {
+      const hit = localStorage.getItem(`var-predicted-matches-${userId}`)
+      setLocalPicks(hit ? JSON.parse(hit) : {})
+    } catch { setLocalPicks({}) }
+  }, [userId])
+
+  const rememberLocalPick = useCallback((matchId: string, pick: string) => {
+    setLocalPicks(prev => {
+      const next = { ...prev, [matchId]: pick }
+      try { localStorage.setItem(`var-predicted-matches-${userId}`, JSON.stringify(next)) } catch { /* ignore */ }
+      return next
+    })
+  }, [userId])
 
   useEffect(() => {
     fetch("/api/matches?upcoming")
@@ -151,6 +192,10 @@ export default function PredictDashboard() {
     if (userId) loadRoast()
   }, [userId, loadRoast])
 
+  useEffect(() => {
+    loadKnowsYou()
+  }, [userId, loadKnowsYou])
+
   const handleSubmitPrediction = async (pick: string, confidence: string) => {
     if (!userId || !selectedMatch) return
     setSubmitting(true)
@@ -167,9 +212,23 @@ export default function PredictDashboard() {
           confidence,
         }),
       })
+      // Already predicted (409) — lock the UI; VAR keeps the original call.
+      if (res.status === 409) {
+        const data = await res.json().catch(() => ({}))
+        rememberLocalPick(selectedMatch.id, data.predictedWinner ?? pick)
+        setSubmitted(false)
+        return
+      }
+
       if (res.ok) {
         setSubmitted(true)
         setPickStat(null)
+        rememberLocalPick(selectedMatch.id, pick)
+        // Pre-Cog reveal — did VAR call your pick before you made it?
+        if (precog?.ready && precog.pick) {
+          setReveal({ hit: precog.pick === pick, pick: precog.pick })
+        }
+        setTimeout(loadKnowsYou, 3000)  // let Walrus index the forecast + prediction
         // Mark new prediction so history page knows to invalidate its 1h cache
         try { localStorage.setItem(`var-last-prediction-${userId}`, Date.now().toString()) } catch {}
         // Clear predict cache so fresh verdict is generated
@@ -203,6 +262,28 @@ export default function PredictDashboard() {
   const predictions = parseMemories(memories)
   const groups = [...new Set(allMatches.map(m => m.group))].sort()
   const groupMatches = allMatches.filter(m => m.group === selectedGroup)
+
+  // Merge memory-derived predictions with the device-local cache so every
+  // already-predicted match is locked (one prediction per match, forever).
+  const predictedPicks: Record<string, string> = { ...localPicks }
+  for (const p of predictions) predictedPicks[p.matchId] = p.predictedWinner
+
+  const selId = selectedMatch?.id
+  const selPredicted = selId ? !!predictedPicks[selId] : false
+
+  // Fetch VAR's pre-pick forecast for the selected (unpredicted) match.
+  useEffect(() => {
+    setPrecog(null)
+    if (!userId || !selId || selPredicted) { setPrecogLoading(false); return }
+    let cancelled = false
+    setPrecogLoading(true)
+    fetch(`/api/precog?userId=${encodeURIComponent(userId)}&matchId=${selId}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setPrecog(d) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setPrecogLoading(false) })
+    return () => { cancelled = true }
+  }, [userId, selId, selPredicted])
 
   // ── Wallet not connected ────────────────────────────────────
   if (!userId) {
@@ -259,17 +340,38 @@ export default function PredictDashboard() {
             <main className="flex-1 flex flex-col gap-6 min-w-0 animate-fade-in-up delay-200 w-full">
 
               {submitted && (
-                <div
-                  className="rounded-2xl p-3.5 text-[13px] font-medium flex items-center gap-2 border border-[#1D9E75]/25 shadow-md shadow-[#1D9E75]/5 animate-fade-in-up"
-                  style={{ background: "rgba(29, 158, 117, 0.12)", color: "#34D399" }}
-                >
-                  <i className="ti ti-check text-[15px] flex-shrink-0" />
-                  <span>
-                    Prediction saved to Walrus! VAR has taken note.
-                    {pickStat && (
-                      <span className="ml-2 opacity-60 font-normal">· {pickStat}</span>
-                    )}
-                  </span>
+                <div className="flex flex-col gap-2 animate-fade-in-up">
+                  <div
+                    className="rounded-2xl p-3.5 text-[13px] font-medium flex items-center gap-2 border border-[#1D9E75]/25 shadow-md shadow-[#1D9E75]/5"
+                    style={{ background: "rgba(29, 158, 117, 0.12)", color: "#34D399" }}
+                  >
+                    <i className="ti ti-check text-[15px] flex-shrink-0" />
+                    <span>
+                      Prediction saved to Walrus! VAR has taken note.
+                      {pickStat && (
+                        <span className="ml-2 opacity-60 font-normal">· {pickStat}</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Pre-Cog reveal */}
+                  {reveal && (
+                    <div
+                      className="rounded-2xl p-3.5 text-[13px] font-medium flex items-center gap-2 border"
+                      style={
+                        reveal.hit
+                          ? { background: "rgba(167,139,250,0.12)", borderColor: "rgba(167,139,250,0.30)", color: "#C4B5FD" }
+                          : { background: "rgba(245,158,11,0.10)", borderColor: "rgba(245,158,11,0.28)", color: "#FCD34D" }
+                      }
+                    >
+                      <i className={`ti ${reveal.hit ? "ti-eye-check" : "ti-eye-off"} text-[15px] flex-shrink-0`} />
+                      <span>
+                        {reveal.hit
+                          ? `Called it. VAR knew you'd pick ${getTLA(reveal.pick)} before you clicked.`
+                          : `VAR guessed ${getTLA(reveal.pick)} — you surprised it this time.`}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -281,11 +383,57 @@ export default function PredictDashboard() {
                     <i className="ti ti-bolt text-[#3B82F6]" />
                     Next match
                   </div>
+
+                  {/* VAR Pre-Cog — VAR guesses your pick before you make it */}
+                  {!predictedPicks[selectedMatch.id] && (precog || precogLoading) && (
+                    <div className="mb-3">
+                      {precogLoading ? (
+                        <div
+                          className="rounded-2xl p-4 border flex items-center gap-2 animate-fade-in-up"
+                          style={{ background: "rgba(167,139,250,0.05)", borderColor: "rgba(167,139,250,0.18)" }}
+                        >
+                          <i className="ti ti-loader animate-slow-spin text-[14px]" style={{ color: "#A78BFA" }} />
+                          <span className="text-[12px]" style={{ color: "rgba(196,181,253,0.7)" }}>
+                            VAR is reading your file...
+                          </span>
+                        </div>
+                      ) : precog?.ready ? (
+                        <div
+                          className="rounded-2xl p-4 border animate-fade-in-up"
+                          style={{ background: "rgba(167,139,250,0.06)", borderColor: "rgba(167,139,250,0.22)" }}
+                        >
+                          <div
+                            className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider mb-1.5"
+                            style={{ color: "#A78BFA" }}
+                          >
+                            <i className="ti ti-eye" />
+                            VAR Pre-Cog
+                          </div>
+                          <p className="text-[13px] leading-relaxed" style={{ color: "rgba(255,255,255,0.78)" }}>
+                            {precog.line}
+                          </p>
+                        </div>
+                      ) : precog && !precog.ready && (precog.remaining ?? 0) > 0 ? (
+                        <div
+                          className="rounded-2xl px-4 py-2.5 border flex items-center gap-2 animate-fade-in-up"
+                          style={{ background: "rgba(167,139,250,0.04)", borderColor: "rgba(167,139,250,0.16)" }}
+                        >
+                          <i className="ti ti-eye-cog text-[13px]" style={{ color: "#A78BFA" }} />
+                          <span className="text-[12px]" style={{ color: "rgba(196,181,253,0.7)" }}>
+                            VAR is still studying you — {precog.remaining} more prediction{(precog.remaining ?? 0) > 1 ? "s" : ""} to go.
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+
                   <MatchHeroCard
                     match={selectedMatch}
                     redirectOnSubmit={false}
                     onSubmit={handleSubmitPrediction}
                     isSubmitting={submitting}
+                    alreadyPredicted={!!predictedPicks[selectedMatch.id]}
+                    existingPick={predictedPicks[selectedMatch.id] ?? null}
                   />
                 </div>
               ) : (
@@ -370,6 +518,30 @@ export default function PredictDashboard() {
                   <StatCard value={stats.wrong} label="Wrong" variant="wrong" />
                 </div>
 
+                {/* VAR knows you — Pre-Cog scoreboard */}
+                {knowsYou && knowsYou.total > 0 && (
+                  <div
+                    className="rounded-2xl p-4 border backdrop-blur-xl"
+                    style={{ background: "rgba(167,139,250,0.06)", borderColor: "rgba(167,139,250,0.22)" }}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <i className="ti ti-eye text-[15px]" style={{ color: "#A78BFA" }} />
+                      <span className="text-[12px] font-semibold" style={{ color: "#C4B5FD" }}>
+                        VAR knows you {knowsYou.knowsYouPct}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full overflow-hidden mb-2" style={{ background: "rgba(255,255,255,0.06)" }}>
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${knowsYou.knowsYouPct}%`, background: "linear-gradient(90deg, #8B5CF6, #A78BFA)" }}
+                      />
+                    </div>
+                    <p className="text-[11px]" style={{ color: "rgba(255,255,255,0.40)" }}>
+                      VAR guessed {knowsYou.hits} of your last {knowsYou.total} picks before you made them.
+                    </p>
+                  </div>
+                )}
+
                 {/* Champion pick CTA */}
                 <Link
                   href="/champion"
@@ -412,7 +584,7 @@ export default function PredictDashboard() {
                                 setSelectedGroup(g)
                                 const first = allMatches.find(m => m.group === g) ?? null
                                 setSelectedMatch(first)
-                                setSubmitted(false); setPickStat(null)
+                                setSubmitted(false); setPickStat(null); setReveal(null)
                               }}
                               className="flex items-center justify-center py-1.5 rounded-lg text-[12px] font-bold transition-all duration-150 active:scale-95"
                               style={{
@@ -437,7 +609,7 @@ export default function PredictDashboard() {
                         {groupMatches.map((m, i) => (
                           <button
                             key={m.id}
-                            onClick={() => { setSelectedMatch(m); setSubmitted(false); setPickStat(null) }}
+                            onClick={() => { setSelectedMatch(m); setSubmitted(false); setPickStat(null); setReveal(null) }}
                             className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
                             style={{
                               borderBottom: i < groupMatches.length - 1 ? "0.5px solid rgba(255, 255, 255, 0.05)" : undefined,
@@ -467,9 +639,11 @@ export default function PredictDashboard() {
                               </span>
                               <span className="text-[10px] text-neutral-500">{m.date} · {m.time}</span>
                             </div>
-                            {selectedMatch?.id === m.id && (
+                            {predictedPicks[m.id] ? (
+                              <i className="ti ti-lock text-[12px] text-[#1D9E75] flex-shrink-0 ml-2" title="Already predicted" />
+                            ) : selectedMatch?.id === m.id ? (
                               <i className="ti ti-chevron-right text-[12px] text-[#3B82F6] flex-shrink-0 ml-2" />
-                            )}
+                            ) : null}
                           </button>
                         ))}
                       </div>

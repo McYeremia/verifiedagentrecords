@@ -29,7 +29,7 @@ The longer you play, the more data VAR has. Day 1: polite. Day 4+: it names your
 | `/history` | Full timeline: predictions + VAR verdict snapshots |
 | `/champion` | Lock in your World Cup 2026 winner pick |
 | `/leaderboard` | All wallets ranked by prediction accuracy |
-| `/versus?a=0x...&b=0x...` | Head-to-head comparison between two wallets |
+| `/h2h?a=0x...&b=0x...` | Head-to-head (H2H) comparison between two wallets |
 | `/card?userId=0x...` | Shareable roast card — downloadable PNG + X share |
 
 ---

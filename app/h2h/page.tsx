@@ -1,7 +1,7 @@
 import { Suspense } from "react"
-import VersusContent from "./VersusContent"
+import H2HContent from "./H2HContent"
 
-export default function VersusPage() {
+export default function H2HPage() {
   return (
     <Suspense
       fallback={
@@ -14,7 +14,7 @@ export default function VersusPage() {
         </div>
       }
     >
-      <VersusContent />
+      <H2HContent />
     </Suspense>
   )
 }

@@ -10,7 +10,7 @@ function truncateAddress(addr: string) {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
 }
 
-interface VersusStats {
+interface H2HStats {
   predictions: number
   correct: number
   wrong: number
@@ -21,12 +21,12 @@ interface VersusStats {
 interface UserData {
   userId: string
   roast: string
-  stats: VersusStats
+  stats: H2HStats
   loading: boolean
   error?: string
 }
 
-function parseStats(memories: string[]): VersusStats {
+function parseStats(memories: string[]): H2HStats {
   const results = memories.filter(m => m.startsWith("[RESULT]"))
   const correct = results.filter(m => m.includes("— CORRECT")).length
   const wrong = results.filter(m => m.includes("— WRONG")).length
@@ -62,11 +62,11 @@ function StatRow({ label, value, highlight }: { label: string; value: string | n
 function UserCard({
   data,
   isWinner,
-  side,
+  className = "",
 }: {
   data: UserData
   isWinner: boolean
-  side: "left" | "right"
+  className?: string
 }) {
   const borderColor = isWinner ? "rgba(29, 158, 117, 0.35)" : "rgba(255, 255, 255, 0.06)"
   const bgColor = isWinner ? "rgba(29, 158, 117, 0.05)" : "rgba(255, 255, 255, 0.02)"
@@ -74,7 +74,7 @@ function UserCard({
 
   return (
     <div
-      className="flex-1 rounded-2xl p-6 flex flex-col gap-4 min-w-0 transition-all duration-300"
+      className={`flex-1 rounded-2xl p-6 flex flex-col gap-4 min-w-0 transition-all duration-300 ${className}`}
       style={{
         background: bgColor,
         border: `1px solid ${borderColor}`,
@@ -166,7 +166,7 @@ function UserCard({
   )
 }
 
-export default function VersusContent() {
+export default function H2HContent() {
   const searchParams = useSearchParams()
   const account = useCurrentAccount()
   const walletAddress = account?.address ?? ""
@@ -218,7 +218,7 @@ export default function VersusContent() {
     const a = inputA.trim()
     const b = inputB.trim()
     if (!a || !b) return
-    window.location.href = `/versus?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`
+    window.location.href = `/h2h?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`
   }
 
   const showComparison = !!(addrA && addrB)
@@ -245,12 +245,12 @@ export default function VersusContent() {
         <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-14 relative" style={{ zIndex: 1 }}>
 
           {/* Header */}
-          <div className="text-center mb-10">
+          <div className="text-center mb-10 animate-fade-in-up">
             <div
               className="text-[10px] font-semibold uppercase tracking-widest mb-4"
               style={{ color: "rgba(255,255,255,0.22)" }}
             >
-              VAR · Head to Head
+              VAR · H2H · Head to Head
             </div>
             <h1 className="text-[38px] sm:text-[48px] font-medium text-white leading-tight mb-3">
               Who predicts better?
@@ -263,7 +263,7 @@ export default function VersusContent() {
           {/* Input form — always visible at top */}
           {!showComparison && (
             <div
-              className="max-w-xl mx-auto rounded-2xl p-6 flex flex-col gap-4 mb-10"
+              className="max-w-xl mx-auto rounded-2xl p-6 flex flex-col gap-4 mb-10 animate-fade-in-up delay-100"
               style={{
                 background: "rgba(255,255,255,0.02)",
                 border: "1px solid rgba(255,255,255,0.06)",
@@ -279,7 +279,7 @@ export default function VersusContent() {
                     value={inputA}
                     onChange={e => setInputA(e.target.value)}
                     placeholder="0x..."
-                    className="w-full text-[13px] font-mono outline-none"
+                    className="w-full text-[13px] font-mono outline-none transition-all focus:border-[#3B82F6]/40"
                     style={{
                       background: "rgba(255,255,255,0.04)",
                       border: "0.5px solid rgba(255,255,255,0.10)",
@@ -298,7 +298,7 @@ export default function VersusContent() {
                     value={inputB}
                     onChange={e => setInputB(e.target.value)}
                     placeholder="0x..."
-                    className="w-full text-[13px] font-mono outline-none"
+                    className="w-full text-[13px] font-mono outline-none transition-all focus:border-[#3B82F6]/40"
                     style={{
                       background: "rgba(255,255,255,0.04)",
                       border: "0.5px solid rgba(255,255,255,0.10)",
@@ -312,10 +312,10 @@ export default function VersusContent() {
               <button
                 onClick={handleCompare}
                 disabled={!inputA.trim() || !inputB.trim()}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-full text-white text-[13px] font-medium transition-all active:scale-[0.98] disabled:opacity-40"
+                className="group w-full flex items-center justify-center gap-2 py-3 rounded-full text-white text-[13px] font-medium transition-all active:scale-[0.98] disabled:opacity-40 hover:shadow-lg hover:shadow-[#3B82F6]/20"
                 style={{ background: "#3B82F6" }}
               >
-                <i className="ti ti-swords" style={{ fontSize: 14 }} />
+                <i className="ti ti-swords transition-transform group-hover:scale-110" style={{ fontSize: 14 }} />
                 Compare
               </button>
             </div>
@@ -325,10 +325,10 @@ export default function VersusContent() {
           {showComparison && (
             <>
               {/* Change addresses link */}
-              <div className="flex justify-center mb-6">
+              <div className="flex justify-center mb-6 animate-fade-in-up">
                 <a
-                  href="/versus"
-                  className="inline-flex items-center gap-1.5 text-[11px] transition-colors"
+                  href="/h2h"
+                  className="inline-flex items-center gap-1.5 text-[11px] transition-colors hover:text-white"
                   style={{ color: "rgba(255,255,255,0.30)" }}
                 >
                   <i className="ti ti-refresh" style={{ fontSize: 11 }} />
@@ -339,7 +339,7 @@ export default function VersusContent() {
               {/* Winner banner */}
               {(aWins || bWins || tied) && (
                 <div
-                  className="text-center mb-6 py-3 px-6 rounded-full mx-auto inline-flex items-center gap-2 text-[12px] font-semibold"
+                  className="text-center mb-6 py-3 px-6 rounded-full mx-auto inline-flex items-center gap-2 text-[12px] font-semibold animate-pop-in delay-300"
                   style={{
                     display: "flex",
                     maxWidth: "fit-content",
@@ -360,26 +360,32 @@ export default function VersusContent() {
 
               {/* Side-by-side cards */}
               <div className="flex flex-col sm:flex-row gap-4 items-stretch">
-                <UserCard data={dataA} isWinner={!!aWins} side="left" />
+                <UserCard data={dataA} isWinner={!!aWins} className="animate-slide-in-left" />
 
                 {/* VS divider */}
-                <div className="flex sm:flex-col items-center justify-center gap-2 flex-shrink-0">
+                <div className="flex sm:flex-col items-center justify-center gap-2 flex-shrink-0 animate-pop-in delay-200">
                   <div style={{ width: 1, height: 40, background: "rgba(255,255,255,0.06)" }} className="hidden sm:block" />
                   <span
-                    className="text-[11px] font-bold tracking-widest select-none"
-                    style={{ color: "rgba(255,255,255,0.18)" }}
+                    className="flex items-center justify-center rounded-full text-[11px] font-bold tracking-widest select-none"
+                    style={{
+                      width: 38,
+                      height: 38,
+                      color: "#93C5FD",
+                      background: "rgba(59,130,246,0.10)",
+                      border: "0.5px solid rgba(59,130,246,0.28)",
+                    }}
                   >
                     VS
                   </span>
                   <div style={{ width: 1, height: 40, background: "rgba(255,255,255,0.06)" }} className="hidden sm:block" />
                 </div>
 
-                <UserCard data={dataB} isWinner={!!bWins} side="right" />
+                <UserCard data={dataB} isWinner={!!bWins} className="animate-slide-in-right" />
               </div>
 
               {/* Share URL */}
               <div
-                className="mt-8 rounded-xl p-4 flex items-center gap-3"
+                className="mt-8 rounded-xl p-4 flex items-center gap-3 animate-fade-in-up delay-400"
                 style={{
                   background: "rgba(255,255,255,0.02)",
                   border: "0.5px solid rgba(255,255,255,0.06)",
@@ -398,7 +404,7 @@ export default function VersusContent() {
                       navigator.clipboard.writeText(window.location.href).catch(() => {})
                     }
                   }}
-                  className="text-[11px] flex-shrink-0 transition-colors"
+                  className="text-[11px] flex-shrink-0 transition-colors hover:text-white"
                   style={{ color: "rgba(255,255,255,0.35)" }}
                 >
                   Copy

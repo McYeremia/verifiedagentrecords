@@ -72,7 +72,8 @@ export default function CardContent() {
     setDownloading(true)
     setDownloadError(false)
     try {
-      const params = new URLSearchParams({ userId, roast: roast.slice(0, 380) })
+      // Send a little over the 700-char cap — /api/og does the word-boundary trim.
+      const params = new URLSearchParams({ userId, roast: roast.slice(0, 800) })
       const res    = await fetch(`/api/og?${params.toString()}`)
       if (!res.ok) throw new Error(`status ${res.status}`)
       const blob = await res.blob()

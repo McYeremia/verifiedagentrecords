@@ -12,12 +12,22 @@ export async function GET(req: NextRequest) {
     ? `${userId.slice(0, 8)}...${userId.slice(-6)}`
     : userId || "Anonymous"
 
-  // 380 chars fits ~7-8 lines at fontSize 20, lineHeight 1.6 within available canvas
-  const roastDisplay = roast.length > 380 ? roast.slice(0, 377) + "..." : roast
-  const hasRoast     = roastDisplay.trim().length > 0
+  // Cap at 700 chars, but cut on a word boundary so no word is left half-printed.
+  const MAX = 700
+  let roastDisplay = roast
+  if (roast.length > MAX) {
+    const cut       = roast.slice(0, MAX)
+    const lastSpace = cut.lastIndexOf(" ")
+    // Only honor the word boundary if it isn't chopping off too much text.
+    const base      = lastSpace > MAX - 80 ? cut.slice(0, lastSpace) : cut
+    roastDisplay    = base.replace(/[\s.,;:!?-]+$/, "") + "..."
+  }
+  const hasRoast = roastDisplay.trim().length > 0
 
-  // Scale font: shorter text gets bigger treatment
-  const fontSize = roastDisplay.length > 260 ? 19
+  // Scale font: shorter text gets bigger treatment, longer text shrinks to fit.
+  const fontSize = roastDisplay.length > 540 ? 14
+    : roastDisplay.length > 380 ? 16
+    : roastDisplay.length > 260 ? 19
     : roastDisplay.length > 160 ? 22
     : 26
 

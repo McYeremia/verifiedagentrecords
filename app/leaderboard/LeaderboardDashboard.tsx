@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useCurrentAccount, ConnectButton } from "@mysten/dapp-kit"
 import Link from "next/link"
 import Navbar from "../components/Navbar"
 
