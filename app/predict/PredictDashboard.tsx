@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { useCurrentAccount, ConnectButton } from "@mysten/dapp-kit"
 import Navbar from "../components/Navbar"
+import PageBg from "../components/PageBg"
 import StatCard from "../components/StatCard"
 import RoastCard from "../components/RoastCard"
 import HistoryItem from "../components/HistoryItem"
@@ -98,6 +99,7 @@ export default function PredictDashboard() {
   const [precogLoading, setPrecogLoading] = useState(false)
   const [reveal, setReveal] = useState<{ hit: boolean; pick: string } | null>(null)
   const [knowsYou, setKnowsYou] = useState<{ total: number; hits: number; knowsYouPct: number } | null>(null)
+  const [championPick, setChampionPick] = useState<string | null>(null)
 
   const roastRef = useRef<string | null>(null)  // latest roast (avoids spinner on match switch)
   const reqIdRef = useRef(0)                     // guards against stale bootstrap responses
@@ -166,10 +168,16 @@ export default function PredictDashboard() {
     }
   }, [userId])
 
-  // Reset per-user view when the wallet changes.
+  // Reset per-user view when the wallet changes, then reload champion pick from cache.
   useEffect(() => {
     roastRef.current = null
-    setRoast(null); setMemories([]); setMemoriesUsed(0); setPrecog(null); setKnowsYou(null)
+    setRoast(null); setMemories([]); setMemoriesUsed(0); setPrecog(null); setKnowsYou(null); setChampionPick(null)
+    if (!userId) return
+    try {
+      const hit = localStorage.getItem(`var-champion-${userId}`)
+      const cached = hit ? JSON.parse(hit) : null
+      if (cached?.pick) setChampionPick(cached.pick)
+    } catch { /* ignore */ }
   }, [userId])
 
   // Persist memory-derived predictions into localStorage so a match stays locked
@@ -282,7 +290,8 @@ export default function PredictDashboard() {
     return (
       <>
         <Navbar />
-        <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#060C18", minHeight: "calc(100vh - 65px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#040810", minHeight: "calc(100vh - 65px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <PageBg />
           {/* Glow Spots */}
           <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] dark:opacity-[0.1] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
           <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] dark:opacity-[0.06] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
@@ -320,7 +329,8 @@ export default function PredictDashboard() {
   return (
     <>
       <Navbar />
-      <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#060C18", minHeight: "calc(100vh - 65px)" }}>
+      <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#040810", minHeight: "calc(100vh - 65px)" }}>
+        <PageBg />
         {/* Glow Spots */}
         <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] dark:opacity-[0.1] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
         <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] dark:opacity-[0.06] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
@@ -534,23 +544,41 @@ export default function PredictDashboard() {
                   </div>
                 )}
 
-                {/* Champion pick CTA */}
-                <Link
-                  href="/champion"
-                  className="group flex items-center gap-3 rounded-2xl p-4 border border-white/10 backdrop-blur-xl transition-all duration-300 hover:bg-white/[0.06] hover:scale-[1.02] active:scale-[0.98]"
-                  style={{
-                    background: "rgba(255, 255, 255, 0.03)",
-                  }}
-                >
-                  <i className="ti ti-trophy select-none transition-transform group-hover:scale-110 text-[#3B82F6]" style={{ fontSize: 22 }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold text-white">Pick the champion</div>
-                    <div className="text-[11px] text-neutral-400">
-                      Lock in your World Cup winner
+                {/* Champion pick CTA / locked display */}
+                {championPick ? (
+                  <Link
+                    href="/champion"
+                    className="flex items-center gap-3 rounded-2xl p-4 border backdrop-blur-xl transition-all duration-300 hover:bg-white/[0.06]"
+                    style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(245,158,11,0.30)" }}
+                  >
+                    <i className="ti ti-trophy flex-shrink-0" style={{ fontSize: 20, color: "#F59E0B" }} />
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <FlagImg team={championPick} height={24} />
+                      <div className="min-w-0">
+                        <div className="text-[12px] font-extrabold text-white leading-tight">{getTLA(championPick)}</div>
+                        <div className="text-[10px] truncate" style={{ color: "rgba(255,255,255,0.40)" }}>{championPick}</div>
+                      </div>
                     </div>
-                  </div>
-                  <i className="ti ti-arrow-right flex-shrink-0 text-neutral-500 group-hover:text-white transition-all group-hover:translate-x-0.5" style={{ fontSize: 13 }} />
-                </Link>
+                    <span
+                      className="text-[9px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full flex-shrink-0"
+                      style={{ background: "rgba(245,158,11,0.12)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.25)" }}
+                    >
+                      Locked
+                    </span>
+                  </Link>
+                ) : (
+                  <Link
+                    href="/champion"
+                    className="group flex items-center gap-3 rounded-2xl p-4 border border-white/10 backdrop-blur-xl transition-all duration-300 hover:bg-white/[0.06] hover:scale-[1.02] active:scale-[0.98]"
+                    style={{ background: "rgba(255,255,255,0.03)" }}
+                  >
+                    <i className="ti ti-trophy select-none transition-transform group-hover:scale-110 text-[#3B82F6]" style={{ fontSize: 22 }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-semibold text-white">Pick the champion</div>
+                      <div className="text-[11px] text-neutral-400">Lock in your World Cup winner</div>
+                    </div>
+                  </Link>
+                )}
 
                 {/* Group Stage selector */}
                 {allMatches.length > 0 && (
@@ -633,8 +661,6 @@ export default function PredictDashboard() {
                             </div>
                             {predictedPicks[m.id] ? (
                               <i className="ti ti-lock text-[12px] text-[#1D9E75] flex-shrink-0 ml-2" title="Already predicted" />
-                            ) : selectedMatch?.id === m.id ? (
-                              <i className="ti ti-chevron-right text-[12px] text-[#3B82F6] flex-shrink-0 ml-2" />
                             ) : null}
                           </button>
                         ))}

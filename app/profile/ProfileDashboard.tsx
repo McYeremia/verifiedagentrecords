@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { useCurrentAccount, ConnectButton } from "@mysten/dapp-kit"
 import Link from "next/link"
 import Navbar from "../components/Navbar"
+import PageBg from "../components/PageBg"
 
 function truncateAddress(addr: string) {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
@@ -88,7 +89,8 @@ export default function ProfileDashboard() {
     return (
       <>
         <Navbar />
-        <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#060C18", minHeight: "calc(100vh - 65px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#040810", minHeight: "calc(100vh - 65px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <PageBg />
           <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
           <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#A78BFA] opacity-[0.03] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
           <main className="max-w-2xl mx-auto px-4 sm:px-6 py-28 flex flex-col items-center gap-6 text-center relative animate-fade-in-up" style={{ zIndex: 1 }}>
@@ -114,7 +116,8 @@ export default function ProfileDashboard() {
   return (
     <>
       <Navbar />
-      <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#060C18", minHeight: "calc(100vh - 65px)" }}>
+      <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#040810", minHeight: "calc(100vh - 65px)" }}>
+        <PageBg />
         <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
         <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#A78BFA] opacity-[0.04] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
 
@@ -237,11 +240,11 @@ export default function ProfileDashboard() {
                   </div>
                 </div>
                 <div className="flex justify-center gap-4 mt-5">
-                  <Link href={`/history?userId=${encodeURIComponent(userId)}`} className="text-[12px] transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.35)" }}>
-                    Full history →
+                  <Link href={`/history?userId=${encodeURIComponent(userId)}`} className="text-[12px] px-3 py-1.5 rounded-full border border-transparent transition-all duration-200 hover:text-white hover:border-white/20 hover:bg-white/[0.07]" style={{ color: "rgba(255,255,255,0.35)" }}>
+                    Full history
                   </Link>
-                  <Link href={`/card?userId=${encodeURIComponent(userId)}`} className="text-[12px] transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.35)" }}>
-                    Share card →
+                  <Link href={`/card?userId=${encodeURIComponent(userId)}`} className="text-[12px] px-3 py-1.5 rounded-full border border-transparent transition-all duration-200 hover:text-white hover:border-white/20 hover:bg-white/[0.07]" style={{ color: "rgba(255,255,255,0.35)" }}>
+                    Share card
                   </Link>
                 </div>
               </section>

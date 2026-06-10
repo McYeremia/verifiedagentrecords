@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { useCurrentAccount, ConnectButton } from "@mysten/dapp-kit"
 import Link from "next/link"
 import Navbar from "../components/Navbar"
+import PageBg from "../components/PageBg"
 import RoastCard from "../components/RoastCard"
 
 function truncateAddress(addr: string) {
@@ -184,8 +185,8 @@ function UnifiedTimeline({ items, loading }: { items: TimelineItem[]; loading: b
       <div className="py-10 text-center">
         <p className="text-[13px]" style={{ color: "rgba(255,255,255,0.25)" }}>
           No history yet.{" "}
-          <Link href="/predict" className="underline" style={{ color: "#3B82F6" }}>
-            Start predicting →
+          <Link href="/predict" className="underline transition-colors duration-200 hover:text-white" style={{ color: "#3B82F6" }}>
+            Start predicting
           </Link>
         </p>
       </div>
@@ -494,8 +495,9 @@ export default function HistoryDashboard() {
         <Navbar />
         <div
           className="dark bg-grid-pattern relative overflow-hidden"
-          style={{ background: "#060C18", minHeight: "calc(100vh - 65px)", display: "flex", alignItems: "center", justifyContent: "center" }}
+          style={{ background: "#040810", minHeight: "calc(100vh - 65px)", display: "flex", alignItems: "center", justifyContent: "center" }}
         >
+          <PageBg />
           <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
           <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
           <main className="max-w-2xl mx-auto px-4 sm:px-6 py-28 flex flex-col items-center gap-6 text-center relative animate-fade-in-up" style={{ zIndex: 1 }}>
@@ -526,7 +528,8 @@ export default function HistoryDashboard() {
   return (
     <>
       <Navbar />
-      <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#060C18", minHeight: "calc(100vh - 65px)" }}>
+      <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#040810", minHeight: "calc(100vh - 65px)" }}>
+        <PageBg />
         <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
         <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
 
@@ -646,8 +649,8 @@ export default function HistoryDashboard() {
                   <div className="text-[11px] font-semibold uppercase tracking-wider mb-2 text-neutral-400 flex items-center gap-1.5 select-none">
                     <i className="ti ti-gauge text-[#FCD34D]" />
                     Overconfidence index
-                    <Link href={`/profile?userId=${encodeURIComponent(userId!)}`} className="ml-auto text-[10px] font-medium transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.30)" }}>
-                      Full profile →
+                    <Link href={`/profile?userId=${encodeURIComponent(userId!)}`} className="ml-auto text-[10px] font-medium transition-colors duration-200 hover:text-white" style={{ color: "rgba(255,255,255,0.30)" }}>
+                      Full profile
                     </Link>
                   </div>
                   <div className="rounded-2xl p-5 border border-white/10" style={{ background: "rgba(255,255,255,0.03)" }}>

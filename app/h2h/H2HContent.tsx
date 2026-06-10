@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import { useCurrentAccount } from "@mysten/dapp-kit"
 import Navbar from "../components/Navbar"
+import PageBg from "../components/PageBg"
 
 function truncateAddress(addr: string) {
   if (!addr) return ""
@@ -155,10 +156,10 @@ function UserCard({
           {/* Share own history link */}
           <a
             href={`/history?userId=${data.userId}`}
-            className="text-[11px] transition-colors"
+            className="text-[11px] transition-colors duration-200 hover:text-white"
             style={{ color: "rgba(255,255,255,0.25)" }}
           >
-            View full history →
+            View full history
           </a>
         </>
       )}
@@ -236,8 +237,9 @@ export default function H2HContent() {
       <Navbar />
       <div
         className="dark bg-grid-pattern relative overflow-hidden"
-        style={{ background: "#060C18", minHeight: "calc(100vh - 65px)" }}
+        style={{ background: "#040810", minHeight: "calc(100vh - 65px)" }}
       >
+        <PageBg />
         {/* Glow spots */}
         <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
         <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />

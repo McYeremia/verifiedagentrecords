@@ -58,11 +58,10 @@ export default function UpcomingList({ skipFirst = true, limit = 3 }: UpcomingLi
             </span>
             <Link
               href={`/predict?match=${match.id}`}
-              className="text-[12px] font-semibold transition-all duration-200 hover:translate-x-1 flex items-center gap-0.5"
+              className="text-[12px] font-semibold transition-colors duration-200 hover:text-white"
               style={{ color: "#3B82F6" }}
             >
               Predict
-              <i className="ti ti-chevron-right text-[10px]" />
             </Link>
           </div>
         </div>

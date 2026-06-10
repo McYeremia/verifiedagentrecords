@@ -340,7 +340,6 @@ export default function Home() {
                     >
                       <i className="ti ti-lock" />
                       Lock in a prediction
-                      <i className="ti ti-arrow-right opacity-0 -translate-x-2 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0" />
                     </Link>
                     <Link
                       href="/leaderboard"
@@ -655,7 +654,6 @@ export default function Home() {
                 style={{ background: "#3B82F6", padding: "14px 36px", borderRadius: 99 }}
               >
                 Start predicting — it&apos;s free
-                <i className="ti ti-arrow-right transition-transform group-hover:translate-x-1" />
               </Link>
 
               <div
