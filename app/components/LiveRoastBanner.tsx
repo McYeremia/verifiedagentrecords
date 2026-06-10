@@ -14,34 +14,37 @@ export default function LiveRoastBanner() {
 
   useEffect(() => {
     if (!userId) { setRoast(null); setStats(null); return }
-    setLoading(true)
+    let cancelled = false
 
-    // LocalStorage fast-path — same cache used by /history and /card
+    // Instant paint from a clean card cache (stale-while-revalidate). We do NOT
+    // read `var-history-roast` anymore — it could hold a stale "over capacity"
+    // fallback. `/api/card-data` only ever returns a real [ROAST_SNAPSHOT].
+    let hadCache = false
     try {
-      const hit = localStorage.getItem(`var-history-roast-${userId}`)
+      const hit = localStorage.getItem(`var-card-${userId}`)
       if (hit) {
-        const cached = JSON.parse(hit)
-        if (cached?.roast) {
-          const mems: string[] = cached.memories ?? []
-          const total   = mems.filter(t => t.startsWith("[PREDICTION]")).length
-          const correct = mems.filter(t => t.startsWith("[RESULT]") && t.includes("CORRECT")).length
-          const wrong   = mems.filter(t => t.startsWith("[RESULT]") && t.includes("WRONG")).length
-          const accuracy = (correct + wrong) > 0 ? Math.round(correct / (correct + wrong) * 100) : 0
-          setRoast(cached.roast)
-          setStats({ total, accuracy })
-          setLoading(false)
-          return
-        }
+        const c = JSON.parse(hit)
+        if (c?.roast) { setRoast(c.roast); setStats(c.stats ?? null); hadCache = true }
       }
     } catch { /* ignore */ }
+    if (!hadCache) setLoading(true)
 
     fetch(`/api/card-data?userId=${encodeURIComponent(userId)}`)
       .then(r => r.json())
       .then(data => {
-        if (data.roast) { setRoast(data.roast); setStats(data.stats ?? null) }
+        if (cancelled || !data.roast) return
+        setRoast(data.roast)
+        // The "predictions" count comes from the snapshot (predictionCount = actual
+        // predictions made). stats.total is the [LEADERBOARD] RESOLVED count and
+        // stays 0 until a match result comes in, so it must not drive this number.
+        const stats = { total: data.predictionCount ?? data.stats?.total ?? 0, accuracy: data.stats?.accuracy ?? 0 }
+        setStats(stats)
+        try { localStorage.setItem(`var-card-${userId}`, JSON.stringify({ roast: data.roast, stats })) } catch { /* ignore */ }
       })
       .catch(() => {})
-      .finally(() => setLoading(false))
+      .finally(() => { if (!cancelled) setLoading(false) })
+
+    return () => { cancelled = true }
   }, [userId])
 
   if (!userId || (!roast && !loading)) return null
@@ -77,7 +80,7 @@ export default function LiveRoastBanner() {
                 <div>
                   <div className="text-[13px] font-semibold text-white">Verified Agent Records</div>
                   <div className="text-[11px] text-neutral-500">
-                    Live verdict · {stats?.total ?? 0} prediction{(stats?.total ?? 0) !== 1 ? "s" : ""}
+                    Live verdict{stats && stats.total > 0 ? ` · ${stats.total} prediction${stats.total !== 1 ? "s" : ""}` : ""}
                   </div>
                 </div>
                 <Link
@@ -103,7 +106,7 @@ export default function LiveRoastBanner() {
                 <div className="flex items-center gap-1.5">
                   <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#1D9E75", flexShrink: 0 }} className="animate-pulse" />
                   <span className="text-[11px] text-neutral-500">
-                    {stats?.total ?? 0} predictions · {stats?.accuracy ?? 0}% accuracy · Walrus Mainnet
+                    {stats && stats.total > 0 ? `${stats.total} predictions · ${stats.accuracy}% accuracy · ` : ""}Walrus Mainnet
                   </span>
                 </div>
                 <Link

@@ -27,7 +27,7 @@ export async function saveRoastSnapshot(
 
   const { text: roastText } = await generateText({
     model: groq("llama-3.3-70b-versatile"),
-    maxRetries: 1, // don't hammer Groq on a rate-limit — snapshot write is non-fatal
+    maxRetries: 0, // fail fast: a 429 sends a long retry-after, and the AI SDK would WAIT on it (30s hang on the prediction POST). Snapshot write is non-fatal — skip retry.
     prompt: `You are VAR — Verified Agent Records. A ruthlessly honest football prediction referee who remembers EVERY call this user has made.
 
 Prediction track record for user "${userId}":

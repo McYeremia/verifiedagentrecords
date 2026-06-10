@@ -433,65 +433,68 @@ export default function HistoryDashboard() {
 
   useEffect(() => {
     if (!userId) return
-    setLoading(true)
-    setSnapshotsLoading(true)
-
-    // Roast: 2-hour localStorage cache, invalidated if new prediction since last cache
-    ;(async () => {
-      const CACHE_TTL = 2 * 60 * 60 * 1000 // 2 hours
+    let cancelled = false
+    const cacheKey = `var-history-data-${userId}`
+    const patchCache = (patch: Record<string, unknown>) => {
       try {
-        const cachedStr  = localStorage.getItem(`var-history-roast-${userId}`)
-        const lastPredStr = localStorage.getItem(`var-last-prediction-${userId}`)
-        if (cachedStr) {
-          const cached   = JSON.parse(cachedStr) as { roast: string; memoriesUsed: number; memories: string[]; ts: number }
-          const age      = Date.now() - (cached.ts ?? 0)
-          const lastPred = lastPredStr ? parseInt(lastPredStr) : 0
-          // Reject poisoned cache (error response stored memories as null/undefined)
-          const memoriesValid = Array.isArray(cached.memories)
-          // Use cache if fresh, no new prediction, and memories are a real array
-          if (age < CACHE_TTL && lastPred <= (cached.ts ?? 0) && memoriesValid) {
-            setRoast(cached.roast || "No predictions yet. Too scared to be wrong?")
-            setMemoriesUsed(cached.memoriesUsed || 0)
-            setMemories(cached.memories)
-            setRoastTs(cached.ts ?? null)
-            setLoading(false)
-            return
-          }
-        }
-      } catch { /* ignore localStorage errors */ }
+        const prev = JSON.parse(localStorage.getItem(cacheKey) || "null") || {}
+        localStorage.setItem(cacheKey, JSON.stringify({ ...prev, ...patch }))
+      } catch { /* ignore */ }
+    }
 
-      // Cache miss / stale / new prediction → fetch fresh (bust server cache too)
-      try {
-        const res  = await fetch(`/api/roast?userId=${encodeURIComponent(userId)}&bust=1`)
-        const data = await res.json()
-        const now = Date.now()
-        setRoast(data.roast || "No predictions yet. Too scared to be wrong?")
-        setMemoriesUsed(data.memoriesUsed || 0)
-        setMemories(data.memories || [])
-        setRoastTs(now)
-        // Only cache valid responses — never cache error responses (memories would be null)
-        if (Array.isArray(data.memories)) {
-          try {
-            localStorage.setItem(`var-history-roast-${userId}`, JSON.stringify({
-              roast: data.roast, memoriesUsed: data.memoriesUsed, memories: data.memories, ts: now,
-            }))
-          } catch { /* ignore */ }
+    // Instant paint from cache (stale-while-revalidate): navigating in from ANY
+    // page (home, leaderboard, …) shows data immediately — never a flash of zeros,
+    // never blocked on a possibly rate-limited recall. The fetches below refresh it.
+    let hadCache = false
+    try {
+      const hit = localStorage.getItem(cacheKey)
+      if (hit) {
+        const c = JSON.parse(hit) as { memories?: string[]; snapshots?: RoastSnapshot[] }
+        if (Array.isArray(c.memories)) { setMemories(c.memories); setMemoriesUsed(c.memories.length) }
+        if (Array.isArray(c.snapshots)) {
+          setSnapshots(c.snapshots)
+          const latest = c.snapshots[c.snapshots.length - 1]
+          if (latest?.roast) { setRoast(latest.roast); setRoastTs(new Date(latest.timestamp).getTime() || null) }
         }
-      } catch { /* non-critical */ }
-      setLoading(false)
-    })()
+        hadCache = true
+      }
+    } catch { /* ignore */ }
+    if (!hadCache) { setLoading(true); setSnapshotsLoading(true) }
 
-    // Snapshots — always read directly from Walrus, no Groq
+    // Timeline memories — fresh, zero Groq. Keep current data on an empty/rate-limited reply.
+    fetch(`/api/memories?userId=${encodeURIComponent(userId)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return
+        if (Array.isArray(d.memories) && !(d.rateLimited && d.memories.length === 0)) {
+          setMemories(d.memories); setMemoriesUsed(d.memories.length)
+          patchCache({ memories: d.memories })
+        }
+      })
+      .catch(() => {})
+
+    // Live verdict + snapshots — the LATEST [ROAST_SNAPSHOT] (zero Groq), written on
+    // each prediction + result. Same verdict as /predict; never generates here.
     fetch(`/api/roast/history?userId=${encodeURIComponent(userId)}`)
       .then(r => r.json())
       .then(data => {
-        // Under a Walrus rate-limit the API returns an empty list flagged
-        // rateLimited — don't wipe the snapshots we're already showing.
+        if (cancelled) return
         if (data.rateLimited && (data.snapshots?.length ?? 0) === 0) return
-        setSnapshots(data.snapshots ?? [])
+        const snaps: RoastSnapshot[] = data.snapshots ?? []
+        setSnapshots(snaps)
+        const latest = snaps[snaps.length - 1] // /api/roast/history returns oldest→newest
+        if (latest?.roast) {
+          setRoast(latest.roast)
+          setRoastTs(new Date(latest.timestamp).getTime() || null)
+        } else if (!hadCache) {
+          setRoast("No predictions yet. Too scared to be wrong?")
+        }
+        patchCache({ snapshots: snaps })
       })
       .catch(() => {})
-      .finally(() => setSnapshotsLoading(false))
+      .finally(() => { if (!cancelled) { setLoading(false); setSnapshotsLoading(false) } })
+
+    return () => { cancelled = true }
   }, [userId])
 
   if (!userId) {

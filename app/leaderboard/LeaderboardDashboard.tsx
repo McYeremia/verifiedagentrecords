@@ -38,10 +38,24 @@ export default function LeaderboardDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setLoading(true)
+    let cancelled = false
+
+    // Instant paint from cache (stale-while-revalidate) — no reload-from-empty on
+    // every open. Always revalidate in the background; keep data on a failed/empty reply.
+    let hadCache = false
+    try {
+      const hit = localStorage.getItem("var-leaderboard")
+      if (hit) {
+        const c = JSON.parse(hit) as LeaderboardEntry[]
+        if (Array.isArray(c) && c.length) { setEntries(c); setLoading(false); hadCache = true }
+      }
+    } catch { /* ignore */ }
+    if (!hadCache) setLoading(true)
+
     fetch("/api/leaderboard")
       .then(r => r.json())
       .then(data => {
+        if (cancelled) return
         const raw: string[] = data.texts || []
         const parsed = raw
           .map(t => parseLeaderboardEntry(t))
@@ -56,13 +70,20 @@ export default function LeaderboardDashboard() {
           }
         }
 
-        setEntries(
-          Array.from(uniqueMap.values())
-            .sort((a, b) => b.accuracy - a.accuracy || b.predictions - a.predictions)
-        )
+        const sorted = Array.from(uniqueMap.values())
+          .sort((a, b) => b.accuracy - a.accuracy || b.predictions - a.predictions)
+
+        // Keep current data if the reply came back empty (rate-limited / transient);
+        // only show the empty state when we never had a cache to begin with.
+        if (sorted.length > 0 || !hadCache) setEntries(sorted)
+        if (sorted.length > 0) {
+          try { localStorage.setItem("var-leaderboard", JSON.stringify(sorted)) } catch { /* ignore */ }
+        }
       })
       .catch(() => {})
-      .finally(() => setLoading(false))
+      .finally(() => { if (!cancelled) setLoading(false) })
+
+    return () => { cancelled = true }
   }, [])
 
   const totalPredictions = entries.reduce((s, e) => s + e.predictions, 0)

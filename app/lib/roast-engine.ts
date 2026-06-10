@@ -17,6 +17,9 @@ export interface RoastResult {
   roast: string
   memoriesUsed: number
   memories: string[]
+  /** True only when `roast` is the synthetic "over capacity" fallback (Groq failed
+   *  and no real cached roast existed). Callers must NOT cache a degraded verdict. */
+  degraded?: boolean
 }
 
 /** Cached roast if still fresh and not busting — lets callers skip the recall. */
@@ -89,10 +92,11 @@ export async function getRoast(userId: string, memories: string[], bust = false)
     const hasStreak  = memories.some(t => t.startsWith("[STREAK]"))
 
     let roast: string
+    let degraded = false
     try {
       const { text } = await generateText({
         model: groq("llama-3.3-70b-versatile"),
-        maxRetries: 1, // a 429 (esp. daily-token limit) won't clear in seconds — fail fast to the cached fallback
+        maxRetries: 0, // fail fast: a 429 carries a long retry-after the AI SDK would WAIT on — serve the cached/fallback verdict instead of hanging
         prompt: `You are VAR — Verified Agent Records. A ruthlessly honest football prediction referee who remembers EVERY call this user has ever made. Your job: roast them based solely on their actual track record below.
 
 Prediction track record for user "${userId}":
@@ -115,11 +119,16 @@ Rules:
       roastCache.set(userId, { roast, memoriesUsed: userMemories.length, memories: userMemories, ts: Date.now() })
     } catch (err) {
       console.error("Groq generation failed:", err)
-      roast = roastCache.get(userId)?.roast
-        ?? "VAR's verdict engine is temporarily over capacity. Your prediction records are intact — come back when the dust settles."
+      const cachedRoast = roastCache.get(userId)?.roast
+      if (cachedRoast) {
+        roast = cachedRoast // a real (stale) verdict — fine to display/cache
+      } else {
+        roast = "VAR's verdict engine is temporarily over capacity. Your prediction records are intact — come back when the dust settles."
+        degraded = true     // synthetic fallback — callers must not freeze this into a cache
+      }
     }
 
-    return { roast, memoriesUsed: userMemories.length, memories: userMemories }
+    return { roast, memoriesUsed: userMemories.length, memories: userMemories, degraded }
   })()
 
   inFlightRoast.set(userId, promise)

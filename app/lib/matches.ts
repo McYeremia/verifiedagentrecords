@@ -119,6 +119,19 @@ export const getCompletedMatches = () => matches.filter(m => m.result !== null)
 export const getMatchById = (id: string) => matches.find(m => m.id === id) ?? null
 export const getMatchByApiId = (apiId: number) => matches.find(m => m.apiId === apiId) ?? null
 
+// Kickoff as an absolute instant. `time` is "HH:MM WIB" (UTC+7) on the WIB `date`,
+// so a fixed +07:00 offset makes this consistent on both client and server.
+export const getKickoff = (match: Match): Date => {
+  const hhmm = match.time.replace(/\s*WIB\s*/i, "").trim() // "02:00 WIB" → "02:00"
+  return new Date(`${match.date}T${hhmm}:00+07:00`)
+}
+
+// Predictions lock at kickoff — no calls allowed once the match has started.
+export const isPredictionClosed = (match: Match): boolean => {
+  const k = getKickoff(match).getTime()
+  return Number.isFinite(k) && Date.now() >= k
+}
+
 export const FLAG_CODE: Record<string, string> = {
   "Mexico": "mx", "South Africa": "za", "South Korea": "kr", "Czechia": "cz",
   "Canada": "ca", "Bosnia-Herz.": "ba", "Qatar": "qa", "Switzerland": "ch",

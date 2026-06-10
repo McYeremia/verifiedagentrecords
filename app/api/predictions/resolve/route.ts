@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
 
         const { text: patternInsight } = await generateText({
           model: groq("llama-3.3-70b-versatile"),
-          maxRetries: 1,
+          maxRetries: 0, // fail fast on a 429 retry-after so resolve doesn't hang; PATTERN is non-fatal
           prompt: `Analyze the football prediction patterns of user "${userId}" based on the following track record:\n\n${memoryContext}\n\nWrite 1-2 sentences describing their prediction patterns or biases. Focus on: teams they frequently back, whether they overestimate or underestimate certain teams, accuracy patterns. Use casual English with a slightly sarcastic tone.`,
         })
 

@@ -262,9 +262,8 @@ export default function PredictDashboard() {
             })
             .catch(() => {})
         }, 2500)
-        const groupMatches = allMatches.filter(m => m.group === selectedGroup)
-        const idx = groupMatches.findIndex(m => m.id === selectedMatch.id)
-        if (idx >= 0 && idx < groupMatches.length - 1) setSelectedMatch(groupMatches[idx + 1])
+        // Stay on the match the user just predicted so they see its verdict +
+        // locked state — don't auto-advance to the next fixture.
       }
     } finally {
       setSubmitting(false)

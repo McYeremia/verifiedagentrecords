@@ -9,6 +9,7 @@ import {
 import { saveRoastSnapshot } from "../../lib/roast-snapshot";
 import { primeRoastCache } from "../../lib/roast-engine";
 import { computeScoreboard } from "../../lib/bias";
+import { getMatchById, isPredictionClosed } from "../../lib/matches";
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,6 +20,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "userId, matchId, and predictedWinner are required" },
         { status: 400 }
+      );
+    }
+
+    // Predictions lock at kickoff — server-side guard (the UI also blocks it, but
+    // this catches clock skew / direct API calls). Absolute time via the +07:00
+    // (WIB) offset baked into getKickoff, so it's independent of server timezone.
+    const matchForDeadline = getMatchById(matchId);
+    if (matchForDeadline && isPredictionClosed(matchForDeadline)) {
+      return NextResponse.json(
+        { error: "predictions_closed", message: "This match has kicked off. VAR locks predictions at kickoff." },
+        { status: 403 }
       );
     }
 

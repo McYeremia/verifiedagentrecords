@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import type { Match } from "../lib/matches"
-import { getTLA } from "../lib/matches"
+import { getTLA, getKickoff } from "../lib/matches"
 import FlagImg from "./FlagImg"
 
 interface MatchHeroCardProps {
@@ -71,10 +71,12 @@ export default function MatchHeroCard({
   existingPick = null,
 }: MatchHeroCardProps) {
   const router = useRouter()
+  const kickoffMs = getKickoff(match).getTime()
   const [pick, setPick] = useState<string | null>(null)
   const [confidence, setConfidence] = useState("medium")
   const [stageIdx, setStageIdx] = useState(0)
   const [progress, setProgress] = useState(0)
+  const [closed, setClosed] = useState(false)
 
   useEffect(() => {
     if (!isSubmitting) { setStageIdx(0); setProgress(0); return }
@@ -103,8 +105,18 @@ export default function MatchHeroCard({
     return () => { timers.forEach(clearTimeout); clearInterval(prog) }
   }, [isSubmitting])
 
+  // Predictions lock at kickoff. Re-checks on a timer and resets when the match changes.
+  useEffect(() => {
+    if (!Number.isFinite(kickoffMs)) { setClosed(false); return }
+    const past = () => Date.now() >= kickoffMs
+    setClosed(past())
+    if (past()) return
+    const id = setInterval(() => { if (past()) setClosed(true) }, 30000)
+    return () => clearInterval(id)
+  }, [kickoffMs])
+
   const handleSubmit = async () => {
-    if (!pick) return
+    if (!pick || closed) return
     if (redirectOnSubmit) {
       router.push(`/predict?match=${match.id}&pick=${encodeURIComponent(pick)}&confidence=${confidence}`)
     } else if (onSubmit) {
@@ -134,7 +146,7 @@ export default function MatchHeroCard({
             {match.date} · {match.time} · {match.venue}
           </span>
         </div>
-        <Countdown targetDate={`${match.date}T00:00:00`} />
+        <Countdown targetDate={Number.isFinite(kickoffMs) ? new Date(kickoffMs).toISOString() : `${match.date}T00:00:00`} />
       </div>
 
       {/* Body */}
@@ -202,6 +214,23 @@ export default function MatchHeroCard({
           )}
           <p className="text-[12px] max-w-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.40)" }}>
             You already called this one. VAR keeps every prediction on record — no take-backs.
+          </p>
+        </div>
+        ) : closed ? (
+        /* Locked at kickoff — predictions close once the match starts */
+        <div
+          className="flex flex-col items-center gap-3 py-6 rounded-xl text-center"
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.10)" }}
+        >
+          <div
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-full uppercase tracking-wide"
+            style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)", border: "0.5px solid rgba(255,255,255,0.12)" }}
+          >
+            <i className="ti ti-clock-x" style={{ fontSize: 10 }} />
+            Predictions closed
+          </div>
+          <p className="text-[12px] max-w-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.40)" }}>
+            This match has kicked off. VAR locks every call at kickoff — no predicting after the whistle.
           </p>
         </div>
         ) : (

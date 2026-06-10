@@ -116,7 +116,7 @@ export async function GET() {
           const ctx = (allMem.results ?? []).map((m: { text: string }) => m.text).join("\n")
           const { text: insight } = await generateText({
             model: groq("llama-3.3-70b-versatile"),
-            maxRetries: 1,
+            maxRetries: 0, // fail fast on a 429 retry-after so the cron sync doesn't hang past its timeout; PATTERN is non-fatal
             prompt: `Analyze the football prediction patterns of user "${userId}":\n\n${ctx}\n\nWrite 1-2 sentences about their prediction bias. Use casual English with a sarcastic tone.`,
           })
           const patternText = `[PATTERN] User ${userId} after ${resultCount} predictions: ${correctCount} correct, ${resultCount - correctCount} wrong (${Math.round((correctCount / resultCount) * 100)}% accuracy). Pattern analysis: ${insight} Timestamp: ${new Date().toISOString()}`
