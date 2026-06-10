@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ snapshots })
   } catch {
-    return NextResponse.json({ error: "Failed to fetch roast history" }, { status: 500 })
+    // Degrade gracefully under rate limit — empty list rather than 500.
+    return NextResponse.json({ snapshots: [], rateLimited: true })
   }
 }

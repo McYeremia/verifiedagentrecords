@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getMemWal } from "../../lib/memwal"
+import { getMemWal, recallUserMemories, appendUserMemory } from "../../lib/memwal"
 import { getMatchById } from "../../lib/matches"
 import {
   computeBiasProfile,
   forecastPick,
-  parsePredictions,
+  computeScoreboard,
   PRECOG_MIN_PREDICTIONS,
 } from "../../lib/bias"
 
@@ -17,43 +17,20 @@ export async function GET(req: NextRequest) {
   const matchId = searchParams.get("matchId")
   if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 })
 
-  const mem = getMemWal()
-
   let memories: string[] = []
   try {
-    const res = await mem.recall({ query: `User ${userId} predictions results forecast` })
-    memories = (res.results ?? [])
-      .map((m: { text: string }) => m.text)
-      .filter((t: string) => t.includes(userId))
+    memories = await recallUserMemories(userId)
   } catch (e) {
     console.error("precog recall failed:", e)
-    return NextResponse.json({ error: "recall failed" }, { status: 500 })
+    // Degrade gracefully — never 500 the UI over a rate limit.
+    return matchId
+      ? NextResponse.json({ ready: false, predictionCount: 0, remaining: PRECOG_MIN_PREDICTIONS, rateLimited: true })
+      : NextResponse.json({ scoreboard: true, total: 0, hits: 0, knowsYouPct: 0, rateLimited: true })
   }
 
   // ── Scoreboard mode ────────────────────────────────────────────────────────
   if (!matchId) {
-    const forecasts = memories.filter(t => t.startsWith("[VAR_FORECAST]"))
-    const predMap: Record<string, string> = {}
-    for (const p of parsePredictions(memories)) predMap[p.matchId] = p.pick
-
-    let total = 0
-    let hits = 0
-    const seen = new Set<string>()
-    for (const f of forecasts) {
-      const midM = f.match(/matchId: ([\w_]+)/)
-      const pickM = f.match(/would pick (.+?) for /)
-      if (!midM || !pickM) continue
-      const mid = midM[1]
-      if (seen.has(mid)) continue
-      seen.add(mid)
-      const actual = predMap[mid]
-      if (!actual) continue            // only score matches the user actually predicted
-      total++
-      if (pickM[1].trim() === actual) hits++
-    }
-
-    const knowsYouPct = total > 0 ? Math.round((hits / total) * 100) : 0
-    return NextResponse.json({ scoreboard: true, total, hits, knowsYouPct })
+    return NextResponse.json({ scoreboard: true, ...computeScoreboard(memories) })
   }
 
   // ── Per-match forecast mode ────────────────────────────────────────────────
@@ -83,13 +60,17 @@ export async function GET(req: NextRequest) {
     t => t.startsWith("[VAR_FORECAST]") && t.includes(`(matchId: ${matchId})`)
   )
   if (!already) {
+    const text = `[VAR_FORECAST] VAR predicted User ${userId} would pick ${forecast.pick} for ${match.homeTeam} vs ${match.awayTeam} (matchId: ${matchId}). Basis: ${forecast.basis}. Timestamp: ${new Date().toISOString()}`
+    // Append to the shared cache immediately so dedupe + scoreboard see it, then
+    // persist best-effort. We do NOT poll waitForRememberJob — that multiplied
+    // Walrus requests and pushed us into the rate limit.
+    appendUserMemory(userId, text)
     try {
-      const text = `[VAR_FORECAST] VAR predicted User ${userId} would pick ${forecast.pick} for ${match.homeTeam} vs ${match.awayTeam} (matchId: ${matchId}). Basis: ${forecast.basis}. Timestamp: ${new Date().toISOString()}`
-      const job = await mem.remember(text)
-      await mem.waitForRememberJob(job.job_id)
+      const mem = getMemWal()
+      await mem.remember(text)
     } catch (e) {
       console.error("precog write failed:", e)
-      // Non-fatal — still return the forecast for display.
+      // Non-fatal — forecast is already shown and cached.
     }
   }
 

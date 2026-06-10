@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import WalletButton from "./WalletButton"
 
@@ -51,19 +52,18 @@ export default function Navbar() {
       }}
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between">
-        {/* Brand Logo & Title */}
-        <Link href="/" className="flex items-center gap-2.5 group transition-transform duration-300 active:scale-95">
-          <div
-            className="flex items-center justify-center rounded-lg text-white font-semibold transition-transform duration-300 group-hover:rotate-12 group-hover:scale-105 shadow-md shadow-[#3B82F6]/10"
-            style={{ width: 34, height: 34, background: "#3B82F6", fontSize: 13, flexShrink: 0 }}
-          >
-            VAR
-          </div>
-          <span
-            className="text-[14px] font-medium text-white transition-colors group-hover:text-[#93C5FD]"
-          >
-            Verified Agent Records
-          </span>
+        {/* Brand Logo */}
+        <Link href="/" className="flex items-center group transition-transform duration-300 active:scale-95">
+          <Image
+            src="/logo.svg"
+            alt="VAR — Verified Agent Records"
+            width={76}
+            height={40}
+            priority
+            unoptimized
+            className="transition-opacity duration-300 group-hover:opacity-90"
+            style={{ width: "auto", height: 36 }}
+          />
         </Link>
 
         {/* Desktop Navigation Link Pills */}

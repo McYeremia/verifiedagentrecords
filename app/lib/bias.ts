@@ -110,6 +110,31 @@ export interface Forecast {
   line: string
 }
 
+// Pre-Cog scoreboard — "VAR knows you X%". Counts matches where a [VAR_FORECAST]
+// and the user's [PREDICTION] both exist and agree, by matchId.
+export function computeScoreboard(memories: string[]): { total: number; hits: number; knowsYouPct: number } {
+  const predMap: Record<string, string> = {}
+  for (const p of parsePredictions(memories)) predMap[p.matchId] = p.pick
+
+  let total = 0
+  let hits = 0
+  const seen = new Set<string>()
+  for (const f of memories) {
+    if (!f.startsWith("[VAR_FORECAST]")) continue
+    const midM = f.match(/matchId: ([\w_]+)/)
+    const pickM = f.match(/would pick (.+?) for /)
+    if (!midM || !pickM) continue
+    const mid = midM[1]
+    if (seen.has(mid)) continue
+    seen.add(mid)
+    const actual = predMap[mid]
+    if (!actual) continue
+    total++
+    if (pickM[1].trim() === actual) hits++
+  }
+  return { total, hits, knowsYouPct: total > 0 ? Math.round((hits / total) * 100) : 0 }
+}
+
 export function forecastPick(
   profile: BiasProfile,
   fixture: { home: string; away: string; matchId: string }

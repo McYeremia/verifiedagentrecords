@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { useCurrentAccount, ConnectButton } from "@mysten/dapp-kit"
 import Navbar from "../components/Navbar"
@@ -99,13 +99,8 @@ export default function PredictDashboard() {
   const [reveal, setReveal] = useState<{ hit: boolean; pick: string } | null>(null)
   const [knowsYou, setKnowsYou] = useState<{ total: number; hits: number; knowsYouPct: number } | null>(null)
 
-  const loadKnowsYou = useCallback(() => {
-    if (!userId) { setKnowsYou(null); return }
-    fetch(`/api/precog?userId=${encodeURIComponent(userId)}`)
-      .then(r => r.json())
-      .then(d => { if (d.scoreboard) setKnowsYou(d) })
-      .catch(() => {})
-  }, [userId])
+  const roastRef = useRef<string | null>(null)  // latest roast (avoids spinner on match switch)
+  const reqIdRef = useRef(0)                     // guards against stale bootstrap responses
 
   // Always land at the top — arriving with ?match= from the landing page can
   // otherwise leave the scroll position mid/bottom of the page.
@@ -144,57 +139,56 @@ export default function PredictDashboard() {
       .catch(() => {})
   }, [searchParams])
 
-  // bust=false → use localStorage cache (verdict stays until new prediction)
-  // bust=true  → bypass cache, call Groq (triggered only by new prediction)
-  const loadRoast = useCallback(async (bust = false) => {
+  // ONE consolidated call: roast + full memories + per-match Pre-Cog + scoreboard.
+  // Collapsing these into a single endpoint means one Walrus recall per page
+  // interaction — robust even on serverless where in-memory caches aren't shared.
+  const loadBootstrap = useCallback(async (matchId?: string, bust = false) => {
     if (!userId) return
-
-    if (!bust) {
-      try {
-        const hit = localStorage.getItem(`var-predict-roast-${userId}`)
-        if (hit) {
-          const d = JSON.parse(hit)
-          // Reject poisoned cache — must have a real array (null = error response was cached)
-          if (Array.isArray(d.memories)) {
-            setRoast(d.roast ?? null)
-            setMemoriesUsed(d.memoriesUsed ?? 0)
-            setMemories(d.memories)
-            return
-          }
-        }
-      } catch { /* ignore localStorage errors */ }
-    }
-
-    setLoading(true)
+    const myReq = ++reqIdRef.current
+    // Big verdict spinner only on the first load; match switches keep the verdict
+    // and just refresh the small Pre-Cog area.
+    if (!roastRef.current) setLoading(true)
+    if (matchId) setPrecogLoading(true)
     try {
-      const url = `/api/roast?userId=${encodeURIComponent(userId)}${bust ? "&bust=1" : ""}`
+      const url = `/api/bootstrap?userId=${encodeURIComponent(userId)}${matchId ? `&matchId=${matchId}` : ""}${bust ? "&bust=1" : ""}`
       const res = await fetch(url)
       const data = await res.json()
-      setRoast(data.roast ?? null)
+      if (myReq !== reqIdRef.current) return // a newer request superseded this one
+      if (data.roast) { setRoast(data.roast); roastRef.current = data.roast }
       setMemoriesUsed(data.memoriesUsed ?? 0)
-      setMemories(data.memories ?? [])
-      // Only cache valid responses — never cache error responses (memories would be null)
-      if (Array.isArray(data.memories)) {
-        try {
-          localStorage.setItem(`var-predict-roast-${userId}`, JSON.stringify({
-            roast: data.roast, memoriesUsed: data.memoriesUsed, memories: data.memories,
-          }))
-        } catch { /* ignore */ }
-      }
+      if (Array.isArray(data.memories)) setMemories(data.memories)
+      if (data.knowsYou) setKnowsYou(data.knowsYou)
+      setPrecog(data.precog ?? null)
     } catch {
-      setRoast("VAR is loading its verdict...")
+      if (!roastRef.current) setRoast("VAR is loading its verdict...")
     } finally {
-      setLoading(false)
+      if (myReq === reqIdRef.current) { setLoading(false); setPrecogLoading(false) }
     }
   }, [userId])
 
+  // Reset per-user view when the wallet changes.
   useEffect(() => {
-    if (userId) loadRoast()
-  }, [userId, loadRoast])
+    roastRef.current = null
+    setRoast(null); setMemories([]); setMemoriesUsed(0); setPrecog(null); setKnowsYou(null)
+  }, [userId])
 
+  // Persist memory-derived predictions into localStorage so a match stays locked
+  // even if a later recall returns empty/degraded (rate limit).
   useEffect(() => {
-    loadKnowsYou()
-  }, [userId, loadKnowsYou])
+    if (!userId || memories.length === 0) return
+    const fromMemory = parseMemories(memories)
+    if (fromMemory.length === 0) return
+    setLocalPicks(prev => {
+      let changed = false
+      const next = { ...prev }
+      for (const p of fromMemory) {
+        if (next[p.matchId] !== p.predictedWinner) { next[p.matchId] = p.predictedWinner; changed = true }
+      }
+      if (!changed) return prev
+      try { localStorage.setItem(`var-predicted-matches-${userId}`, JSON.stringify(next)) } catch { /* ignore */ }
+      return next
+    })
+  }, [userId, memories])
 
   const handleSubmitPrediction = async (pick: string, confidence: string) => {
     if (!userId || !selectedMatch) return
@@ -221,6 +215,11 @@ export default function PredictDashboard() {
       }
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({} as {
+          roast?: string | null
+          memories?: string[] | null
+          knowsYou?: { total: number; hits: number; knowsYouPct: number }
+        }))
         setSubmitted(true)
         setPickStat(null)
         rememberLocalPick(selectedMatch.id, pick)
@@ -228,13 +227,13 @@ export default function PredictDashboard() {
         if (precog?.ready && precog.pick) {
           setReveal({ hit: precog.pick === pick, pick: precog.pick })
         }
-        setTimeout(loadKnowsYou, 3000)  // let Walrus index the forecast + prediction
         // Mark new prediction so history page knows to invalidate its 1h cache
-        try { localStorage.setItem(`var-last-prediction-${userId}`, Date.now().toString()) } catch {}
-        // Clear predict cache so fresh verdict is generated
-        try { localStorage.removeItem(`var-predict-roast-${userId}`) } catch {}
-        // Reload verdict — new prediction = fresh Groq call (bust cache)
-        void loadRoast(true)
+        try { localStorage.setItem(`var-last-prediction-${userId}`, Date.now().toString()) } catch { /* ignore */ }
+        // The POST already generated a fresh verdict + [ROAST_SNAPSHOT] and primed
+        // the server cache; reuse its results instantly (no second Groq call).
+        if (data.roast) { setRoast(data.roast); roastRef.current = data.roast }
+        if (Array.isArray(data.memories)) setMemories(data.memories)
+        if (data.knowsYou) setKnowsYou(data.knowsYou)
         setTimeout(() => {
           fetch(`/api/predictions/stats?matchId=${selectedMatch.id}`)
             .then(r => r.json())
@@ -271,19 +270,12 @@ export default function PredictDashboard() {
   const selId = selectedMatch?.id
   const selPredicted = selId ? !!predictedPicks[selId] : false
 
-  // Fetch VAR's pre-pick forecast for the selected (unpredicted) match.
+  // One bootstrap fetch per user/match change → roast + memories + Pre-Cog + scoreboard.
+  // (selPredicted in deps so the banner clears once a match becomes locked.)
   useEffect(() => {
-    setPrecog(null)
-    if (!userId || !selId || selPredicted) { setPrecogLoading(false); return }
-    let cancelled = false
-    setPrecogLoading(true)
-    fetch(`/api/precog?userId=${encodeURIComponent(userId)}&matchId=${selId}`)
-      .then(r => r.json())
-      .then(d => { if (!cancelled) setPrecog(d) })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setPrecogLoading(false) })
-    return () => { cancelled = true }
-  }, [userId, selId, selPredicted])
+    if (!userId) return
+    loadBootstrap(selId)
+  }, [userId, selId, selPredicted, loadBootstrap])
 
   // ── Wallet not connected ────────────────────────────────────
   if (!userId) {

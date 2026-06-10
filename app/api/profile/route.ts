@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getMemWal } from "../../lib/memwal"
+import { recallUserMemories } from "../../lib/memwal"
 import {
   computeBiasProfile,
   computeConfidenceCalibration,
@@ -14,16 +14,12 @@ export async function GET(req: NextRequest) {
   const userId = searchParams.get("userId")
   if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 })
 
-  const mem = getMemWal()
   let memories: string[] = []
   try {
-    const res = await mem.recall({ query: `User ${userId} predictions results confidence streak` })
-    memories = (res.results ?? [])
-      .map((m: { text: string }) => m.text)
-      .filter((t: string) => t.includes(userId))
+    memories = await recallUserMemories(userId)
   } catch (e) {
     console.error("profile recall failed:", e)
-    return NextResponse.json({ error: "recall failed" }, { status: 500 })
+    return NextResponse.json({ error: "recall failed", rateLimited: true }, { status: 200 })
   }
 
   const profile = computeBiasProfile(memories)

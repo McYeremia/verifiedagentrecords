@@ -8,8 +8,8 @@ export async function saveRoastSnapshot(
   userId: string,
   trigger: SnapshotTrigger,
   userMemories: string[]
-): Promise<void> {
-  if (userMemories.length === 0) return
+): Promise<{ roast: string; snapshot: string } | null> {
+  if (userMemories.length === 0) return null
 
   const groq = createOpenAI({
     apiKey: process.env.GROQ_API_KEY,
@@ -42,4 +42,5 @@ Start directly — no greeting. Casual English. Max 2 sentences. Must reference 
   const snapshotText = `[ROAST_SNAPSHOT] User ${userId} after ${predCount} predictions (${trigger}): ${roastText} Timestamp: ${new Date().toISOString()}`
   const job = await mem.remember(snapshotText)
   await mem.waitForRememberJob(job.job_id)
+  return { roast: roastText, snapshot: snapshotText }
 }

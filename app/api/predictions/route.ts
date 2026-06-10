@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMemWal } from "../../lib/memwal";
+import {
+  getMemWal,
+  appendUserMemory,
+  recallUserMemories,
+  hasPredictedMatch,
+  markPredictedMatch,
+} from "../../lib/memwal";
+import { saveRoastSnapshot } from "../../lib/roast-snapshot";
+import { primeRoastCache } from "../../lib/roast-engine";
+import { computeScoreboard } from "../../lib/bias";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,20 +25,30 @@ export async function POST(req: NextRequest) {
     const mem = getMemWal();
 
     // One prediction per match, locked forever — reject any re-prediction.
-    // This is the authoritative guard; the UI lock is just UX on top of it.
-    const existing = await mem.recall({
-      query: `PREDICTION User ${userId} matchId ${matchId} predicted to win`,
-    });
-    const already = (existing.results || [])
-      .map((m: { text: string }) => m.text)
-      .find(
+    // 1) Durable in-process index — reliable even when a live recall is rate-limited.
+    // 2) Shared recall cache as a backstop (also catches predictions made on other
+    //    server instances / before this process started). If the recall itself
+    //    fails, we fall through and write rather than 500 — better a rare duplicate
+    //    than blocking the user.
+    let already: string | undefined;
+    if (hasPredictedMatch(userId, matchId)) {
+      already = "indexed";
+    } else {
+      let priorMemories: string[] = [];
+      try {
+        priorMemories = await recallUserMemories(userId);
+      } catch {
+        priorMemories = [];
+      }
+      already = priorMemories.find(
         (t: string) =>
           t.startsWith("[PREDICTION]") &&
           t.includes(userId) &&
           t.includes(`(matchId: ${matchId})`)
       );
+    }
     if (already) {
-      const winnerM = already.match(/predicted (.+?) to win/);
+      const winnerM = already === "indexed" ? null : already.match(/predicted (.+?) to win/);
       return NextResponse.json(
         {
           error: "already_predicted",
@@ -46,12 +65,37 @@ export async function POST(req: NextRequest) {
 
     const job = await mem.remember(memoryText);
     await mem.waitForRememberJob(job.job_id);
+    appendUserMemory(userId, memoryText);     // keep shared recall cache fresh
+    markPredictedMatch(userId, matchId);      // durable lock — survives later recall failures
+
+    // Freeze a [ROAST_SNAPSHOT] for the timeline (one Groq call, reused as the
+    // live verdict so the predict page doesn't fire a second roast). Non-fatal.
+    let roast: string | null = null;
+    let memories: string[] | null = null;
+    let knowsYou = { total: 0, hits: 0, knowsYouPct: 0 };
+    try {
+      const userMems = await recallUserMemories(userId); // includes the new prediction
+      const snap = await saveRoastSnapshot(userId, "PREDICTION", userMems);
+      const finalMems = snap ? [...userMems, snap.snapshot] : userMems;
+      memories = finalMems;
+      knowsYou = computeScoreboard(finalMems);
+      if (snap) {
+        roast = snap.roast;
+        appendUserMemory(userId, snap.snapshot);
+        primeRoastCache(userId, snap.roast, finalMems); // so bootstrap returns the fresh verdict
+      }
+    } catch (e) {
+      console.error("prediction snapshot failed:", e);
+    }
 
     return NextResponse.json({
       success: true,
       message: "Prediction saved to Walrus",
       blob_id: job.job_id,
-      prediction: { userId, matchId, homeTeam, awayTeam, predictedWinner, confidence }
+      prediction: { userId, matchId, homeTeam, awayTeam, predictedWinner, confidence },
+      roast,
+      memories,
+      knowsYou,
     });
 
   } catch (error) {
