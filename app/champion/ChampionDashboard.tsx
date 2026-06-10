@@ -76,6 +76,7 @@ export default function ChampionDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, team: selectedTeam }),
       })
+      const data = await res.json().catch(() => null)
       if (res.ok) {
         const at = new Date().toISOString()
         setCurrentPick(selectedTeam)
@@ -84,6 +85,17 @@ export default function ChampionDashboard() {
           localStorage.setItem(
             `var-champion-${userId}`,
             JSON.stringify({ pick: selectedTeam, lockedAt: at }),
+          )
+        } catch { /* ignore */ }
+      } else if (res.status === 409 && data?.pick) {
+        // Already locked on the server — reconcile to the original pick.
+        const at = data.lockedAt ?? new Date().toISOString()
+        setCurrentPick(data.pick)
+        setLockedAt(at)
+        try {
+          localStorage.setItem(
+            `var-champion-${userId}`,
+            JSON.stringify({ pick: data.pick, lockedAt: at }),
           )
         } catch { /* ignore */ }
       }
@@ -308,7 +320,7 @@ export default function ChampionDashboard() {
                     className={`ti ${submitting ? "ti-loader animate-slow-spin" : "ti-lock"}`}
                     style={{ fontSize: 14 }}
                   />
-                  {submitting ? "Locking in..." : "Lock in forever"}
+                  {submitting ? "Confirming..." : "Confirm Pick"}
                 </button>
               </>
             ) : (

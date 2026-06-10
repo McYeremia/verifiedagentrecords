@@ -186,7 +186,7 @@ function UnifiedTimeline({ items, loading }: { items: TimelineItem[]; loading: b
         <p className="text-[13px]" style={{ color: "rgba(255,255,255,0.25)" }}>
           No history yet.{" "}
           <Link href="/predict" className="underline transition-colors duration-200 hover:text-white" style={{ color: "#3B82F6" }}>
-            Start predicting
+            Make Predictions
           </Link>
         </p>
       </div>
@@ -436,9 +436,9 @@ export default function HistoryDashboard() {
     setLoading(true)
     setSnapshotsLoading(true)
 
-    // Roast: 1-hour localStorage cache, invalidated if new prediction since last cache
+    // Roast: 2-hour localStorage cache, invalidated if new prediction since last cache
     ;(async () => {
-      const CACHE_TTL = 60 * 60 * 1000 // 1 hour
+      const CACHE_TTL = 2 * 60 * 60 * 1000 // 2 hours
       try {
         const cachedStr  = localStorage.getItem(`var-history-roast-${userId}`)
         const lastPredStr = localStorage.getItem(`var-last-prediction-${userId}`)
@@ -484,7 +484,12 @@ export default function HistoryDashboard() {
     // Snapshots — always read directly from Walrus, no Groq
     fetch(`/api/roast/history?userId=${encodeURIComponent(userId)}`)
       .then(r => r.json())
-      .then(data => setSnapshots(data.snapshots ?? []))
+      .then(data => {
+        // Under a Walrus rate-limit the API returns an empty list flagged
+        // rateLimited — don't wipe the snapshots we're already showing.
+        if (data.rateLimited && (data.snapshots?.length ?? 0) === 0) return
+        setSnapshots(data.snapshots ?? [])
+      })
       .catch(() => {})
       .finally(() => setSnapshotsLoading(false))
   }, [userId])
@@ -575,7 +580,7 @@ export default function HistoryDashboard() {
                   style={{ background: "#3B82F6", color: "white" }}
                 >
                   <i className="ti ti-share transition-transform group-hover:rotate-12" />
-                  Share my roast card
+                  Share Verdict Card
                 </Link>
 
                 {/* Walrus proof */}
@@ -650,7 +655,7 @@ export default function HistoryDashboard() {
                     <i className="ti ti-gauge text-[#FCD34D]" />
                     Overconfidence index
                     <Link href={`/profile?userId=${encodeURIComponent(userId!)}`} className="ml-auto text-[10px] font-medium transition-colors duration-200 hover:text-white" style={{ color: "rgba(255,255,255,0.30)" }}>
-                      Full profile
+                      View Profile
                     </Link>
                   </div>
                   <div className="rounded-2xl p-5 border border-white/10" style={{ background: "rgba(255,255,255,0.03)" }}>

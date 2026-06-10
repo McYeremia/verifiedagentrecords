@@ -340,7 +340,7 @@ export default function Home() {
                       style={{ background: "#3B82F6", padding: "13px 30px", borderRadius: 99 }}
                     >
                       <i className="ti ti-lock" />
-                      Lock in a prediction
+                      Make a Prediction
                     </Link>
                     <Link
                       href="/leaderboard"
@@ -616,7 +616,7 @@ export default function Home() {
                   className="text-[13px] font-medium transition-opacity hover:opacity-100 self-start sm:self-auto"
                   style={{ color: "rgba(255,255,255,0.5)" }}
                 >
-                  Open Prediction Dashboard
+                  Make Predictions
                 </Link>
               </div>
               <UpcomingList skipFirst={false} limit={8} />
@@ -656,7 +656,7 @@ export default function Home() {
                 className="group inline-flex items-center gap-2.5 text-white text-[14px] font-medium transition-all active:scale-[0.97] hover:opacity-90 hover:shadow-lg hover:shadow-[#3B82F6]/25"
                 style={{ background: "#3B82F6", padding: "14px 36px", borderRadius: 99 }}
               >
-                Start predicting — it&apos;s free
+                Start Predicting
               </Link>
 
               <div

@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const mem = getMemWal()
-    const recall = await mem.recall({ query: `PREDICTION matchId: ${matchId} predicted win` })
+    const recall = await mem.recall({ query: `PREDICTION matchId: ${matchId} predicted win`, limit: 200 }) // all predictions for this match — default 10 undercounts pick %
 
     const predictions = (recall.results ?? [])
       .map((r: { text: string }) => r.text)

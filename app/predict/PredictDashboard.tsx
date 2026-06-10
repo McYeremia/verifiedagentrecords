@@ -281,6 +281,12 @@ export default function PredictDashboard() {
   const predictedPicks: Record<string, string> = { ...localPicks }
   for (const p of predictions) predictedPicks[p.matchId] = p.predictedWinner
 
+  // Total prediction count for the sidebar. While the verdict/memories are still
+  // loading, `memories` is empty (reset on user change) so stats.total reads 0 —
+  // fall back to the localStorage-backed predicted-match count so the total never
+  // flashes 0 during the load.
+  const displayTotal = Math.max(stats.total, Object.keys(predictedPicks).length)
+
   const selId = selectedMatch?.id
   const selPredicted = selId ? !!predictedPicks[selId] : false
 
@@ -543,7 +549,7 @@ export default function PredictDashboard() {
 
                 {/* Stats */}
                 <div className="grid grid-cols-3 gap-2">
-                  <StatCard value={stats.total} label="Total" variant="neutral" />
+                  <StatCard value={displayTotal} label="Total" variant="neutral" />
                   <StatCard value={stats.correct} label="Correct" variant="correct" />
                   <StatCard value={stats.wrong} label="Wrong" variant="wrong" />
                 </div>

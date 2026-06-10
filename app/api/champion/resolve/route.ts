@@ -28,8 +28,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No champion pick found for this user" }, { status: 404 })
     }
 
-    const latest = picks[picks.length - 1]
-    const teamMatch = latest.match(/predicts (.+?) will win/)
+    // Resolve against the ORIGINAL locked pick (earliest "Locked in"), not array
+    // position — recall() orders by relevance, not time.
+    const original = [...picks].sort((a, b) => {
+      const ta = a.match(/Locked in: (.+)/)?.[1] ?? ""
+      const tb = b.match(/Locked in: (.+)/)?.[1] ?? ""
+      return ta.localeCompare(tb)
+    })[0]
+    const teamMatch = original.match(/predicts (.+?) will win/)
     const predictedTeam = teamMatch?.[1] ?? "Unknown"
     const isCorrect = predictedTeam.toLowerCase() === actualWinner.toLowerCase()
 

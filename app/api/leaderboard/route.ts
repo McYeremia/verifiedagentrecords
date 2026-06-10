@@ -6,6 +6,7 @@ export async function GET() {
     const mem = getMemWal()
     const result = await mem.recall({
       query: "LEADERBOARD user predictions correct accuracy",
+      limit: 200, // one [LEADERBOARD] per ranked user — default 10 would truncate the board
     })
 
     const texts = (result.results || []).map((m: { text: string }) => m.text)

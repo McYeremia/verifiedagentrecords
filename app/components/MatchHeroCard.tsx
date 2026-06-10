@@ -53,11 +53,11 @@ const CONFIDENCE_OPTIONS = [
   { value: "low", label: "Low" },
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
-  { value: "all-in", label: "All in (Max)" },
+  { value: "all-in", label: "All-In" },
 ]
 
 const STAGES = [
-  { icon: "ti-cloud-upload", text: "Sending to Walrus...",         ms: 2200 },
+  { icon: "ti-cloud-upload", text: "Recording to Walrus...",        ms: 2200 },
   { icon: "ti-brain",        text: "VAR is reviewing your file...", ms: 2800 },
   { icon: "ti-sparkles",     text: "Generating your verdict...",    ms: 99999 },
 ]
@@ -303,7 +303,7 @@ export default function MatchHeroCard({
             ) : (
               <>
                 <i className="ti ti-lock" />
-                <span>Lock in — VAR is watching</span>
+                <span>Lock In Prediction</span>
               </>
             )}
           </button>

@@ -16,14 +16,18 @@ export async function saveRoastSnapshot(
     baseURL: "https://api.groq.com/openai/v1",
   })
 
+  // Tier flags + counts use the FULL history; only the text sent to Groq is
+  // capped at 15 (matching roast-engine) so a larger recall limit never inflates
+  // the prompt token cost.
   const predCount = userMemories.filter(m => m.startsWith("[PREDICTION]")).length
   const hasResults = userMemories.some(m => m.startsWith("[RESULT]"))
   const hasPattern = userMemories.some(m => m.startsWith("[PATTERN]"))
   const hasStreak  = userMemories.some(m => m.startsWith("[STREAK]"))
-  const memoryContext = userMemories.join("\n")
+  const memoryContext = userMemories.slice(0, 15).join("\n")
 
   const { text: roastText } = await generateText({
     model: groq("llama-3.3-70b-versatile"),
+    maxRetries: 1, // don't hammer Groq on a rate-limit — snapshot write is non-fatal
     prompt: `You are VAR — Verified Agent Records. A ruthlessly honest football prediction referee who remembers EVERY call this user has made.
 
 Prediction track record for user "${userId}":

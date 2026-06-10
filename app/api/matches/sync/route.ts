@@ -51,6 +51,7 @@ export async function GET() {
       const actualWinner =
         apiMatch.score.winner === "HOME_TEAM" ? homeShort
         : apiMatch.score.winner === "AWAY_TEAM" ? awayShort
+        : apiMatch.score.winner === "DRAW" ? "Draw"
         : null
 
       const homeScore: number = apiMatch.score.fullTime.home
@@ -58,6 +59,7 @@ export async function GET() {
 
       const predRecall = await mem.recall({
         query: `PREDICTION matchId: ${match.id} predicted win`,
+        limit: 200, // every user who predicted this match
       })
 
       const predTexts: string[] = (predRecall.results ?? [])
@@ -83,6 +85,7 @@ export async function GET() {
       for (const [userId, predictedWinner] of Object.entries(userPreds)) {
         const existCheck = await mem.recall({
           query: `RESULT Match ${match.id} User ${userId}`,
+          limit: 200, // dedupe guard — must not miss an existing [RESULT] beyond the top 10
         })
         const alreadyDone = (existCheck.results ?? []).some(
           (r: { text: string }) =>
@@ -99,7 +102,7 @@ export async function GET() {
         const rJob = await mem.remember(resultText)
         await mem.waitForRememberJob(rJob.job_id)
 
-        const userResults = await mem.recall({ query: `RESULT User ${userId} predicted` })
+        const userResults = await mem.recall({ query: `RESULT User ${userId} predicted`, limit: 200 }) // full result history drives accuracy + PATTERN trigger
         const userResultTexts = (userResults.results ?? []).filter(
           (r: { text: string }) => r.text.startsWith("[RESULT]") && r.text.includes(`User ${userId}`)
         )
@@ -113,6 +116,7 @@ export async function GET() {
           const ctx = (allMem.results ?? []).map((m: { text: string }) => m.text).join("\n")
           const { text: insight } = await generateText({
             model: groq("llama-3.3-70b-versatile"),
+            maxRetries: 1,
             prompt: `Analyze the football prediction patterns of user "${userId}":\n\n${ctx}\n\nWrite 1-2 sentences about their prediction bias. Use casual English with a sarcastic tone.`,
           })
           const patternText = `[PATTERN] User ${userId} after ${resultCount} predictions: ${correctCount} correct, ${resultCount - correctCount} wrong (${Math.round((correctCount / resultCount) * 100)}% accuracy). Pattern analysis: ${insight} Timestamp: ${new Date().toISOString()}`
@@ -153,7 +157,7 @@ export async function GET() {
 
         // Save roast snapshot for this user
         {
-          const snapMem = await mem.recall({ query: `User ${userId} predictions results wins losses` })
+          const snapMem = await mem.recall({ query: `User ${userId} predictions results wins losses`, limit: 200 }) // snapshot tier flags need the complete history
           const snapUserMems = (snapMem.results ?? [])
             .filter((r: { text: string }) => r.text.includes(userId))
             .map((r: { text: string }) => r.text)

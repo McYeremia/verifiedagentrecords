@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     const mem = getMemWal()
     const result = await mem.recall({
       query: `ROAST_SNAPSHOT User ${userId} after predictions`,
+      limit: 200, // full timeline — default 10 (by relevance) would drop older snapshots
     })
 
     const snapshots = (result.results ?? [])

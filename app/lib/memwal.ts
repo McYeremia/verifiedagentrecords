@@ -73,6 +73,7 @@ export async function recallUserMemories(userId: string): Promise<string[]> {
       const mem = getMemWal();
       const res = await mem.recall({
         query: `User ${userId} predictions results forecast streak confidence`,
+        limit: 200, // default is 10 — far too low for a user's full history; counts/dedup need the complete set
       });
       const mems = (res.results ?? [])
         .map((m: { text: string }) => m.text)

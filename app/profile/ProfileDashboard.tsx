@@ -241,10 +241,10 @@ export default function ProfileDashboard() {
                 </div>
                 <div className="flex justify-center gap-4 mt-5">
                   <Link href={`/history?userId=${encodeURIComponent(userId)}`} className="text-[12px] px-3 py-1.5 rounded-full border border-transparent transition-all duration-200 hover:text-white hover:border-white/20 hover:bg-white/[0.07]" style={{ color: "rgba(255,255,255,0.35)" }}>
-                    Full history
+                    View History
                   </Link>
                   <Link href={`/card?userId=${encodeURIComponent(userId)}`} className="text-[12px] px-3 py-1.5 rounded-full border border-transparent transition-all duration-200 hover:text-white hover:border-white/20 hover:bg-white/[0.07]" style={{ color: "rgba(255,255,255,0.35)" }}>
-                    Share card
+                    Share Card
                   </Link>
                 </div>
               </section>

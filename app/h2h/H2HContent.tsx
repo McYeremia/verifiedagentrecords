@@ -159,7 +159,7 @@ function UserCard({
             className="text-[11px] transition-colors duration-200 hover:text-white"
             style={{ color: "rgba(255,255,255,0.25)" }}
           >
-            View full history
+            View History
           </a>
         </>
       )}
@@ -334,7 +334,7 @@ export default function H2HContent() {
                   style={{ color: "rgba(255,255,255,0.30)" }}
                 >
                   <i className="ti ti-refresh" style={{ fontSize: 11 }} />
-                  Change players
+                  New Comparison
                 </a>
               </div>
 

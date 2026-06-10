@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
 
     const predictions = await mem.recall({
       query: `PREDICTION matchId: ${matchId}`,
+      limit: 200, // every user who predicted this match — default 10 would leave most unresolved
     })
 
     if (!predictions.results || predictions.results.length === 0) {
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
       const text = result.text as string
       if (!text.startsWith("[PREDICTION]")) continue
 
-      const userMatch = text.match(/User (\w+) predicted/)
+      const userMatch = text.match(/User (0x[a-fA-F0-9]+) predicted/)
       const winnerMatch = text.match(/predicted (.+?) to win/)
       const midMatch = text.match(/matchId: ([\w_]+)/)
 
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest) {
       // Count total resolved results for this user
       const userResults = await mem.recall({
         query: `RESULT User ${userId} predicted`,
+        limit: 200, // full result history drives accuracy + the every-3rd PATTERN trigger
       })
 
       const resultCount = (userResults.results || []).filter(
@@ -109,6 +111,7 @@ export async function POST(req: NextRequest) {
 
         const { text: patternInsight } = await generateText({
           model: groq("llama-3.3-70b-versatile"),
+          maxRetries: 1,
           prompt: `Analyze the football prediction patterns of user "${userId}" based on the following track record:\n\n${memoryContext}\n\nWrite 1-2 sentences describing their prediction patterns or biases. Focus on: teams they frequently back, whether they overestimate or underestimate certain teams, accuracy patterns. Use casual English with a slightly sarcastic tone.`,
         })
 
@@ -153,7 +156,7 @@ export async function POST(req: NextRequest) {
 
       // Save roast snapshot — captures how harsh VAR is at this moment in time
       {
-        const snapMem = await mem.recall({ query: `User ${userId} predictions results wins losses` })
+        const snapMem = await mem.recall({ query: `User ${userId} predictions results wins losses`, limit: 200 }) // snapshot tier flags need the complete history
         const snapUserMems = (snapMem.results ?? [])
           .filter((r: { text: string }) => r.text.includes(userId))
           .map((r: { text: string }) => r.text)

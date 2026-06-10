@@ -5,9 +5,10 @@ const KICKOFF = new Date("2026-06-11T20:00:00-05:00") // Opening match, Estadio 
 const FINAL   = new Date("2026-07-19T15:00:00-04:00") // MetLife Stadium, NJ
 
 function useCountdown(target: Date) {
-  const [diff, setDiff] = useState(() => Math.max(0, target.getTime() - Date.now()))
+  const [diff, setDiff] = useState<number | null>(null)
 
   useEffect(() => {
+    setDiff(Math.max(0, target.getTime() - Date.now()))
     const id = setInterval(
       () => setDiff(Math.max(0, target.getTime() - Date.now())),
       1000
@@ -15,12 +16,14 @@ function useCountdown(target: Date) {
     return () => clearInterval(id)
   }, [target])
 
+  if (diff === null) return { days: 0, hours: 0, minutes: 0, seconds: 0, over: false, ready: false }
   return {
     days:    Math.floor(diff / 86_400_000),
     hours:   Math.floor((diff % 86_400_000) / 3_600_000),
     minutes: Math.floor((diff % 3_600_000)  /    60_000),
     seconds: Math.floor((diff %    60_000)  /     1_000),
     over: diff === 0,
+    ready: true,
   }
 }
 
@@ -54,6 +57,7 @@ function Sep({ gold }: { gold?: boolean }) {
 export default function CountdownTimer() {
   const kickoff = useCountdown(KICKOFF)
   const final   = useCountdown(FINAL)
+  const ready   = kickoff.ready
 
   return (
     <div className="flex flex-col gap-4 max-w-2xl mx-auto">
@@ -78,7 +82,7 @@ export default function CountdownTimer() {
         {kickoff.over ? (
           <p className="text-white font-bold text-[15px]"><i className="ti ti-ball-football mr-1.5" />Tournament underway!</p>
         ) : (
-          <div className="flex items-end gap-2 sm:gap-3">
+          <div className="flex items-end gap-2 sm:gap-3" style={{ opacity: ready ? 1 : 0, transition: "opacity 0.3s" }}>
             <Block value={kickoff.days}    label="days" />
             <Sep />
             <Block value={kickoff.hours}   label="hrs" />
@@ -110,7 +114,7 @@ export default function CountdownTimer() {
         {final.over ? (
           <p className="font-bold text-[15px]" style={{ color: "#F59E0B" }}><i className="ti ti-trophy mr-1.5" />Champion crowned!</p>
         ) : (
-          <div className="flex items-end gap-2 sm:gap-3">
+          <div className="flex items-end gap-2 sm:gap-3" style={{ opacity: ready ? 1 : 0, transition: "opacity 0.3s" }}>
             <Block value={final.days}    label="days" />
             <Sep gold />
             <Block value={final.hours}   label="hrs" />

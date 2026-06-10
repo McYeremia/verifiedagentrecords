@@ -11,7 +11,8 @@ import {
   computeScoreboard,
   PRECOG_MIN_PREDICTIONS,
 } from "../../lib/bias"
-import { getRoast, cachedRoastFallback } from "../../lib/roast-engine"
+import { getRoast, peekFreshRoast, latestSnapshotRoast, cachedRoastFallback } from "../../lib/roast-engine"
+import type { RoastResult } from "../../lib/roast-engine"
 
 // Single page bootstrap for /predict — ONE Walrus recall returns the roast,
 // the full memory list, the per-match Pre-Cog forecast, and the "VAR knows you"
@@ -42,8 +43,27 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // ── Roast (cached 30 min — no Groq on repeat) ──
-  const roast = await getRoast(userId, memories, bust)
+  // ── Roast ──
+  // A fresh prediction (bust) earns a new Groq verdict. A plain page load /
+  // match switch must NOT spend tokens: serve the 30-min cache, else replay the
+  // latest stored [ROAST_SNAPSHOT] (zero Groq). Only a user with memories but no
+  // snapshot at all falls back to generating.
+  let roast: RoastResult
+  if (bust) {
+    roast = await getRoast(userId, memories, true)
+  } else {
+    // Predict must be deterministic: the same verdict on every reopen until a new
+    // prediction/result. The stored [ROAST_SNAPSHOT] is that anchor (written on
+    // each prediction + each result) and is independent of the 30-min roast cache,
+    // which /history can overwrite with a freshly generated verdict. Prefer the
+    // snapshot; only fall back to cache/generation when no snapshot exists yet.
+    const snap = latestSnapshotRoast(memories)
+    if (snap) {
+      roast = { roast: snap, memoriesUsed: Math.min(memories.length, 15), memories: memories.slice(0, 15) }
+    } else {
+      roast = peekFreshRoast(userId, false) ?? await getRoast(userId, memories, false)
+    }
+  }
 
   // ── Scoreboard ──
   const knowsYou = computeScoreboard(memories)

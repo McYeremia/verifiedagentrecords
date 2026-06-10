@@ -11,8 +11,10 @@ export async function GET(req: NextRequest) {
     const mem = getMemWal()
 
     const [snapshotRes, lbRes] = await Promise.all([
-      mem.recall({ query: `ROAST_SNAPSHOT User ${userId} after predictions` }),
-      mem.recall({ query: `LEADERBOARD User ${userId} predictions correct accuracy` }),
+      // Need every snapshot so the newest-by-timestamp is actually the latest —
+      // default 10 (by relevance) can omit the most recent verdict.
+      mem.recall({ query: `ROAST_SNAPSHOT User ${userId} after predictions`, limit: 200 }),
+      mem.recall({ query: `LEADERBOARD User ${userId} predictions correct accuracy`, limit: 200 }),
     ])
 
     // Parse snapshots, keep only this user's, sort newest first

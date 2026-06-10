@@ -10,6 +10,9 @@ const groq = createOpenAI({
 const roastCache = new Map<string, { roast: string; memoriesUsed: number; memories: string[]; ts: number }>()
 const CACHE_TTL_MS = 30 * 60 * 1000
 
+// Per-user in-flight generation — concurrent callers share one Groq call.
+const inFlightRoast = new Map<string, Promise<RoastResult>>()
+
 export interface RoastResult {
   roast: string
   memoriesUsed: number
@@ -33,6 +36,25 @@ export function cachedRoastFallback(userId: string): RoastResult | null {
 }
 
 /**
+ * Most recent [ROAST_SNAPSHOT] verdict text from a memory list — zero Groq.
+ * Returns null when the user has no snapshot yet. Lets the predict page show a
+ * verdict on load without spending tokens (snapshots are written on every
+ * prediction + every result, so the latest one is the current verdict).
+ */
+export function latestSnapshotRoast(memories: string[]): string | null {
+  let bestTs = ""
+  let bestRoast: string | null = null
+  for (const t of memories) {
+    if (!t.startsWith("[ROAST_SNAPSHOT]")) continue
+    const roastM = t.match(/\(\w+\): (.+) Timestamp:/)
+    if (!roastM) continue
+    const ts = t.match(/Timestamp: (.+)$/)?.[1]?.trim() ?? ""
+    if (ts >= bestTs) { bestTs = ts; bestRoast = roastM[1].trim() }
+  }
+  return bestRoast
+}
+
+/**
  * Seed the cache with an already-generated roast (e.g. the snapshot written on a
  * new prediction) so the next read returns the fresh verdict without a Groq call.
  */
@@ -53,17 +75,25 @@ export async function getRoast(userId: string, memories: string[], bust = false)
     return { roast: "No predictions yet. Too scared to be wrong?", memoriesUsed: 0, memories: [] }
   }
 
-  const userMemories = memories.slice(0, 15) // cap context to limit tokens
-  const memoryContext = userMemories.join("\n")
-  const hasResults = memories.some(t => t.startsWith("[RESULT]"))
-  const hasPattern = memories.some(t => t.startsWith("[PATTERN]"))
-  const hasStreak  = memories.some(t => t.startsWith("[STREAK]"))
+  // Coalesce concurrent generations for the same user into a single Groq call.
+  // Without this, two near-simultaneous requests (React Strict Mode double-mount,
+  // two tabs, a bust racing a load) each see an empty cache and both generate.
+  const pending = inFlightRoast.get(userId)
+  if (pending) return pending
 
-  let roast: string
-  try {
-    const { text } = await generateText({
-      model: groq("llama-3.3-70b-versatile"),
-      prompt: `You are VAR — Verified Agent Records. A ruthlessly honest football prediction referee who remembers EVERY call this user has ever made. Your job: roast them based solely on their actual track record below.
+  const promise = (async (): Promise<RoastResult> => {
+    const userMemories = memories.slice(0, 15) // cap context to limit tokens
+    const memoryContext = userMemories.join("\n")
+    const hasResults = memories.some(t => t.startsWith("[RESULT]"))
+    const hasPattern = memories.some(t => t.startsWith("[PATTERN]"))
+    const hasStreak  = memories.some(t => t.startsWith("[STREAK]"))
+
+    let roast: string
+    try {
+      const { text } = await generateText({
+        model: groq("llama-3.3-70b-versatile"),
+        maxRetries: 1, // a 429 (esp. daily-token limit) won't clear in seconds — fail fast to the cached fallback
+        prompt: `You are VAR — Verified Agent Records. A ruthlessly honest football prediction referee who remembers EVERY call this user has ever made. Your job: roast them based solely on their actual track record below.
 
 Prediction track record for user "${userId}":
 ${memoryContext}
@@ -80,14 +110,22 @@ Rules:
 - Do NOT start with 'Hey' or any greeting. Start the roast directly.
 - Casual English only. Maximum 3 sentences.
 - The roast must be impossible to write without seeing this exact prediction history.`,
-    })
-    roast = text
-    roastCache.set(userId, { roast, memoriesUsed: userMemories.length, memories: userMemories, ts: Date.now() })
-  } catch (err) {
-    console.error("Groq generation failed:", err)
-    roast = roastCache.get(userId)?.roast
-      ?? "VAR's verdict engine is temporarily over capacity. Your prediction records are intact — come back when the dust settles."
-  }
+      })
+      roast = text
+      roastCache.set(userId, { roast, memoriesUsed: userMemories.length, memories: userMemories, ts: Date.now() })
+    } catch (err) {
+      console.error("Groq generation failed:", err)
+      roast = roastCache.get(userId)?.roast
+        ?? "VAR's verdict engine is temporarily over capacity. Your prediction records are intact — come back when the dust settles."
+    }
 
-  return { roast, memoriesUsed: userMemories.length, memories: userMemories }
+    return { roast, memoriesUsed: userMemories.length, memories: userMemories }
+  })()
+
+  inFlightRoast.set(userId, promise)
+  try {
+    return await promise
+  } finally {
+    inFlightRoast.delete(userId)
+  }
 }

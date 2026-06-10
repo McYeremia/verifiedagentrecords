@@ -310,7 +310,7 @@ export default function CardContent() {
                   }}
                 >
                   <i className={`ti ${downloading ? "ti-loader animate-slow-spin" : "ti-download"}`} />
-                  {downloading ? "Downloading..." : "Save image"}
+                  {downloading ? "Downloading..." : "Download Card"}
                 </button>
               </div>
 
