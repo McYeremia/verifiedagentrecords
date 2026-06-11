@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 import H2HContent from "./H2HContent"
 
+
 export default function H2HPage() {
   return (
     <Suspense
