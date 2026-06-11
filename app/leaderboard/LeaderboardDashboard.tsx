@@ -9,8 +9,11 @@ function truncateAddress(addr: string) {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
 }
 
-const rankColors = ["#3B82F6", "#999999", "#BA7517"]
-const rankLabels = ["1st Place", "2nd Place", "3rd Place"]
+const rankColors  = ["#F59E0B", "#C0C0C0", "#CD7F32"]        // gold, silver, bronze
+const rankBorders = ["rgba(245,158,11,0.40)", "rgba(192,192,192,0.22)", "rgba(205,127,50,0.22)"]
+const rankBtnBg   = ["rgba(245,158,11,0.18)", "rgba(192,192,192,0.14)", "rgba(205,127,50,0.16)"]
+const rankRowBg   = ["rgba(245,158,11,0.06)", "rgba(192,192,192,0.04)", "rgba(205,127,50,0.04)"]
+const rankLabels  = ["1st Place", "2nd Place", "3rd Place"]
 
 type LeaderboardEntry = {
   userId: string
@@ -158,12 +161,17 @@ export default function LeaderboardDashboard() {
                     key={entry.userId}
                     className="rounded-2xl p-4 border backdrop-blur-xl transition-all duration-300 hover:scale-[1.01]"
                     style={{
-                      background: "rgba(255, 255, 255, 0.03)",
-                      borderColor: i === 0 ? "rgba(59, 130, 246, 0.3)" : "rgba(255, 255, 255, 0.08)",
+                      background: rankRowBg[i],
+                      borderColor: rankBorders[i],
                     }}
                   >
                     <div className="flex items-center gap-3 mb-3">
-                      <span className="text-[12px] font-bold uppercase tracking-wider text-neutral-400 min-w-[3.25rem] select-none">{rankLabels[i]}</span>
+                      <span
+                        className="text-[12px] font-bold uppercase tracking-wider min-w-[3.25rem] select-none"
+                        style={{ color: rankColors[i] }}
+                      >
+                        {rankLabels[i]}
+                      </span>
                       <div className="flex-1 min-w-0">
                         <div className="text-[13px] font-medium font-mono text-white truncate">
                           {truncateAddress(entry.userId)}
@@ -174,7 +182,7 @@ export default function LeaderboardDashboard() {
                       </div>
                       <div
                         className="text-[15px] font-bold flex-shrink-0"
-                        style={{ color: i === 0 ? "#93C5FD" : rankColors[i] }}
+                        style={{ color: rankColors[i] }}
                       >
                         {entry.accuracy}%
                       </div>
@@ -183,7 +191,7 @@ export default function LeaderboardDashboard() {
                       <Link
                         href={`/history?userId=${entry.userId}`}
                         className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-medium transition-all hover:opacity-80"
-                        style={{ background: "rgba(59,130,246,0.18)", color: "#93C5FD" }}
+                        style={{ background: rankBtnBg[i], color: rankColors[i] }}
                       >
                         <i className="ti ti-history" style={{ fontSize: 11 }} />
                         View History
@@ -273,7 +281,7 @@ export default function LeaderboardDashboard() {
                         gridTemplateColumns: "3rem 1fr 6rem 5rem 5rem 7rem",
                         gap: "1rem",
                         borderBottom: i < entries.length - 1 ? "0.5px solid rgba(255, 255, 255, 0.05)" : undefined,
-                        background: i === 0 ? "rgba(59, 130, 246, 0.08)" : "transparent",
+                        background: i < 3 ? rankRowBg[i] : "transparent",
                       }}
                     >
                       <div
