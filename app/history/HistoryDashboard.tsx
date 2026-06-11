@@ -524,24 +524,43 @@ export default function HistoryDashboard() {
     return () => { cancelled = true }
   }, [userId])
 
-  // Gap detection: if there's a [RESULT] newer than the latest [ROAST_SNAPSHOT],
-  // the snapshot was not written during resolve (Groq 429/failure). Refresh the
-  // verdict silently in background — one attempt per page visit, non-blocking.
+  // Gap detection: fires ONLY for [PREDICTION] gaps — when a predict submit failed
+  // to save its snapshot (Walrus timeout, Groq failure).
+  // [RESULT] gaps are NOT handled here: resolve always writes a ROAST_SNAPSHOT,
+  // so /api/roast/history will return the fresh one shortly. Triggering gap-fill
+  // on RESULT gaps causes a race condition where a stale Groq call overrides the
+  // correct PATTERN snapshot that /api/roast/history delivers.
   useEffect(() => {
     if (!userId || memories.length === 0 || gapFillAttempted.current) return
 
-    const latestResultTs = memories
-      .filter(m => m.startsWith("[RESULT]") && m.includes(`User ${userId}`))
+    // Only check PREDICTION timestamps — RESULT gaps are resolved by /api/roast/history
+    const latestPredTs = memories
+      .filter(m => m.startsWith("[PREDICTION]"))
       .map(m => m.match(/Timestamp: (.+)/)?.[1] ?? "")
       .filter(Boolean)
       .sort()
       .at(-1)
-    if (!latestResultTs) return // no results yet
+    if (!latestPredTs) return
 
     const latestSnapshotTs = snapshots.length > 0 ? snapshots[snapshots.length - 1].timestamp : ""
-    if (latestSnapshotTs >= latestResultTs) return // snapshot already covers latest result
+    if (latestSnapshotTs >= latestPredTs) return // snapshot covers all predictions
 
     gapFillAttempted.current = true
+
+    // 1. Try localStorage verdict from predict page (same roast, zero network call)
+    try {
+      const stored = localStorage.getItem(`var-predict-roast-${userId}`)
+      if (stored) {
+        const parsed = JSON.parse(stored) as { roast: string; timestamp: string }
+        if (parsed.roast && parsed.timestamp > latestSnapshotTs) {
+          setRoast(parsed.roast)
+          return
+        }
+      }
+    } catch { /* ignore */ }
+
+    // 2. Last resort: generate via getRoast only if no localStorage entry exists
+    // (prediction gap with no stored verdict — rare, only when predict page failed)
     fetch(`/api/roast?userId=${encodeURIComponent(userId)}&bust=1`)
       .then(r => r.json())
       .then(d => { if (d.roast) setRoast(d.roast) })

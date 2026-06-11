@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getMemWal, recallUserMemories, appendUserMemory } from "../../lib/memwal"
+import { rememberSafely } from "../../lib/walrus-utils"
 
 // The original locked pick = earliest "Locked in" timestamp (recall is ordered
 // by relevance, not time, so position can't be trusted).
@@ -81,8 +82,7 @@ export async function POST(req: NextRequest) {
     }
 
     const memoryText = `[CHAMPION_PICK] User ${userId} predicts ${team} will win World Cup 2026. Locked in: ${new Date().toISOString()}`
-    const job = await mem.remember(memoryText)
-    await mem.waitForRememberJob(job.job_id)
+    await rememberSafely(memoryText)
     appendUserMemory(userId, memoryText) // keep shared recall cache fresh
 
     return NextResponse.json({ success: true, pick: team })

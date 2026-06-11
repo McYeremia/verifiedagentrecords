@@ -245,7 +245,17 @@ export default function PredictDashboard() {
         try { localStorage.setItem(`var-last-prediction-${userId}`, Date.now().toString()) } catch { /* ignore */ }
         // The POST already generated a fresh verdict + [ROAST_SNAPSHOT] and primed
         // the server cache; reuse its results instantly (no second Groq call).
-        if (data.roast) { setRoast(data.roast); roastRef.current = data.roast }
+        if (data.roast) {
+          setRoast(data.roast); roastRef.current = data.roast
+          // Share this verdict with the history page — history reads it as a
+          // fallback when no Walrus snapshot exists yet (e.g. timeout during submit).
+          try {
+            localStorage.setItem(`var-predict-roast-${userId}`, JSON.stringify({
+              roast: data.roast,
+              timestamp: new Date().toISOString(),
+            }))
+          } catch { /* ignore */ }
+        }
         if (Array.isArray(data.memories)) setMemories(data.memories)
         if (data.knowsYou) setKnowsYou(data.knowsYou)
         setTimeout(() => {

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getMemWal } from "../../../lib/memwal"
+import { getMemWal, invalidateUserMemories } from "../../../lib/memwal"
 import { getMatchById } from "../../../lib/matches"
 import { saveRoastSnapshot } from "../../../lib/roast-snapshot"
 import { generateWithFallback } from "../../../lib/groq-generate"
+import { rememberSafely } from "../../../lib/walrus-utils"
 
 export async function POST(req: NextRequest) {
   const adminSecret = req.headers.get("x-admin-secret")
@@ -91,8 +92,7 @@ export async function POST(req: NextRequest) {
       // Only write [RESULT] if it doesn't already exist
       if (!hasResult) {
         const resultText = `[RESULT] Match ${matchId} (${match.homeTeam} vs ${match.awayTeam}) ended: ${actualWinner} won ${homeScore}-${awayScore}. User ${userId} predicted ${predictedWinner} — ${isCorrect ? "CORRECT" : "WRONG"}. Timestamp: ${new Date().toISOString()}`
-        const resultJob = await mem.remember(resultText)
-        await mem.waitForRememberJob(resultJob.job_id)
+        await rememberSafely(resultText)
       }
 
       // Count total resolved results for this user
@@ -137,16 +137,14 @@ export async function POST(req: NextRequest) {
 
         const patternText = `[PATTERN] User ${userId} after ${resultCount} predictions: ${userCorrectCount} correct, ${wrongCount} wrong (${Math.round((userCorrectCount / resultCount) * 100)}% accuracy). Pattern analysis: ${patternInsight} Timestamp: ${new Date().toISOString()}`
 
-        const patternJob = await mem.remember(patternText)
-        await mem.waitForRememberJob(patternJob.job_id)
+        await rememberSafely(patternText)
         patternGenerated = true
       }
 
       // Update leaderboard entry for this user
       const lbAccuracy = resultCount > 0 ? Math.round((userCorrectCount / resultCount) * 100) : 0
       const leaderboardText = `[LEADERBOARD] User ${userId}: ${resultCount} predictions, ${userCorrectCount} correct, ${lbAccuracy}% accuracy. Last updated: ${new Date().toISOString()}`
-      const lbJob = await mem.remember(leaderboardText)
-      await mem.waitForRememberJob(lbJob.job_id)
+      await rememberSafely(leaderboardText)
 
       // Write [STREAK] — track consecutive wins/losses
       {
@@ -169,8 +167,7 @@ export async function POST(req: NextRequest) {
             else break
           }
           const streakText = `[STREAK] User ${userId} is on a ${streakLen}-game ${lastOut ? "winning" : "losing"} streak. Last: ${predictedWinner} ${isCorrect ? "CORRECT" : "WRONG"}. Timestamp: ${new Date().toISOString()}`
-          const sJob = await mem.remember(streakText)
-          await mem.waitForRememberJob(sJob.job_id)
+          await rememberSafely(streakText)
         }
       }
 
@@ -186,6 +183,9 @@ export async function POST(req: NextRequest) {
       }
 
       summary.push({ userId, correct: isCorrect, patternGenerated })
+      // Clear the per-user recall cache so the next page load (history/predict)
+      // gets fresh Walrus data instead of the stale pre-resolve snapshot.
+      invalidateUserMemories(userId)
     }
 
     return NextResponse.json({

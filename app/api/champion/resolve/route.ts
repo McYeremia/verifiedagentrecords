@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getMemWal } from "../../../lib/memwal"
+import { rememberSafely } from "../../../lib/walrus-utils"
 
 export async function POST(req: NextRequest) {
   const adminSecret = req.headers.get("x-admin-secret")
@@ -40,8 +41,7 @@ export async function POST(req: NextRequest) {
     const isCorrect = predictedTeam.toLowerCase() === actualWinner.toLowerCase()
 
     const memoryText = `[CHAMPION_RESULT] User ${userId} predicted ${predictedTeam} for World Cup 2026 champion — ${isCorrect ? "CORRECT" : "WRONG"}. Actual champion: ${actualWinner}. Resolved: ${new Date().toISOString()}`
-    const job = await mem.remember(memoryText)
-    await mem.waitForRememberJob(job.job_id)
+    await rememberSafely(memoryText)
 
     return NextResponse.json({ success: true, isCorrect, predictedTeam, actualWinner })
   } catch (error) {

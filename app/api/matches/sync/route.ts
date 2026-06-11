@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
-import { getMemWal } from "../../../lib/memwal"
+import { getMemWal, invalidateUserMemories } from "../../../lib/memwal"
 import { getMatchByApiId } from "../../../lib/matches"
 import { saveRoastSnapshot } from "../../../lib/roast-snapshot"
 import { generateWithFallback } from "../../../lib/groq-generate"
+import { rememberSafely } from "../../../lib/walrus-utils"
 
 // 1-minute in-memory cooldown to prevent abuse
 let lastSyncTime = 0
@@ -93,8 +94,7 @@ export async function GET() {
           predictedWinner.toLowerCase() === actualWinner.toLowerCase()
 
         const resultText = `[RESULT] Match ${match.id} (${match.homeTeam} vs ${match.awayTeam}) ended: ${actualWinner ?? "Draw"} won ${homeScore}-${awayScore}. User ${userId} predicted ${predictedWinner} — ${isCorrect ? "CORRECT" : "WRONG"}. Timestamp: ${new Date().toISOString()}`
-        const rJob = await mem.remember(resultText)
-        await mem.waitForRememberJob(rJob.job_id)
+        await rememberSafely(resultText)
 
         const userResults = await mem.recall({ query: `RESULT User ${userId} predicted`, limit: 200 }) // full result history drives accuracy + PATTERN trigger
         const userResultTexts = (userResults.results ?? []).filter(
@@ -120,14 +120,12 @@ export async function GET() {
             `Analyze the football prediction patterns of user "${userId}":\n\n${ctx}\n\nWrite 1-2 sentences about their prediction bias. Use casual English with a sarcastic tone.`
           )
           const patternText = `[PATTERN] User ${userId} after ${resultCount} predictions: ${correctCount} correct, ${resultCount - correctCount} wrong (${Math.round((correctCount / resultCount) * 100)}% accuracy). Pattern analysis: ${insight} Timestamp: ${new Date().toISOString()}`
-          const pJob = await mem.remember(patternText)
-          await mem.waitForRememberJob(pJob.job_id)
+          await rememberSafely(patternText)
         }
 
         const accuracy = resultCount > 0 ? Math.round((correctCount / resultCount) * 100) : 0
         const lbText = `[LEADERBOARD] User ${userId}: ${resultCount} predictions, ${correctCount} correct, ${accuracy}% accuracy. Last updated: ${new Date().toISOString()}`
-        const lbJob = await mem.remember(lbText)
-        await mem.waitForRememberJob(lbJob.job_id)
+        await rememberSafely(lbText)
 
         // Write [STREAK] — track consecutive wins/losses
         {
@@ -150,8 +148,7 @@ export async function GET() {
               else break
             }
             const streakText = `[STREAK] User ${userId} is on a ${streakLen}-game ${lastOut ? "winning" : "losing"} streak. Last: ${predictedWinner} ${isCorrect ? "CORRECT" : "WRONG"}. Timestamp: ${new Date().toISOString()}`
-            const sJob = await mem.remember(streakText)
-            await mem.waitForRememberJob(sJob.job_id)
+            await rememberSafely(streakText)
           }
         }
 
@@ -166,6 +163,7 @@ export async function GET() {
           }
         }
 
+        invalidateUserMemories(userId)
         resolved++
       }
 

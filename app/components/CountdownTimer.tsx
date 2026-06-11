@@ -1,8 +1,18 @@
 "use client"
 import { useEffect, useState } from "react"
+import { matches, getKickoff } from "../lib/matches"
 
-const KICKOFF = new Date("2026-06-11T20:00:00-05:00") // Opening match, Estadio Azteca
-const FINAL   = new Date("2026-07-19T15:00:00-04:00") // MetLife Stadium, NJ
+// Derived from matches[0] so this always matches the predict-page deadline exactly.
+const FIRST_MATCH = matches[0] // Mexico vs South Africa, 2026-06-12 02:00 WIB
+const KICKOFF = getKickoff(FIRST_MATCH)                // 2026-06-12T02:00:00+07:00 = Jun 11 19:00 UTC
+const FINAL   = new Date("2026-07-19T15:00:00-04:00") // World Cup Final, MetLife Stadium, 15:00 EDT
+
+// Format "2026-06-12" → "12 Jun 2026"
+function fmtDate(dateStr: string): string {
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+  const [, mm, dd] = dateStr.split("-")
+  return `${parseInt(dd)} ${months[parseInt(mm) - 1]} 2026`
+}
 
 function useCountdown(target: Date) {
   const [diff, setDiff] = useState<number | null>(null)
@@ -74,10 +84,12 @@ export default function CountdownTimer() {
               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#3B82F6]" />
             </span>
             <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "rgba(147,197,253,0.75)" }}>
-              Kickoff · 11 Jun 2026
+              Kickoff · {fmtDate(FIRST_MATCH.date)}
             </span>
           </div>
-          <p className="text-[15px] font-medium text-white">Opening match — Estadio Azteca</p>
+          <p className="text-[15px] font-medium text-white">
+            Opening match — {FIRST_MATCH.homeTeam} vs {FIRST_MATCH.awayTeam}
+          </p>
         </div>
         {kickoff.over ? (
           <p className="text-white font-bold text-[15px]"><i className="ti ti-ball-football mr-1.5" />Tournament underway!</p>

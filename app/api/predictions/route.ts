@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getMemWal,
   appendUserMemory,
   recallUserMemories,
   hasPredictedMatch,
   markPredictedMatch,
 } from "../../lib/memwal";
+import { rememberSafely } from "../../lib/walrus-utils";
 import { saveRoastSnapshot } from "../../lib/roast-snapshot";
 import { primeRoastCache } from "../../lib/roast-engine";
 import { computeScoreboard } from "../../lib/bias";
@@ -33,8 +33,6 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
-
-    const mem = getMemWal();
 
     // One prediction per match, locked forever — reject any re-prediction.
     // 1) Durable in-process index — reliable even when a live recall is rate-limited.
@@ -75,8 +73,7 @@ export async function POST(req: NextRequest) {
     // Text stored to Walrus — this is what the roast engine reads later
     const memoryText = `[PREDICTION] User ${userId} predicted ${predictedWinner} to win ${homeTeam} vs ${awayTeam} (matchId: ${matchId}). Confidence: ${confidence || "medium"}. Timestamp: ${new Date().toISOString()}`;
 
-    const job = await mem.remember(memoryText);
-    await mem.waitForRememberJob(job.job_id);
+    const jobId = await rememberSafely(memoryText);
     appendUserMemory(userId, memoryText);     // keep shared recall cache fresh
     markPredictedMatch(userId, matchId);      // durable lock — survives later recall failures
 
@@ -103,7 +100,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Prediction saved to Walrus",
-      blob_id: job.job_id,
+      blob_id: jobId,
       prediction: { userId, matchId, homeTeam, awayTeam, predictedWinner, confidence },
       roast,
       memories,

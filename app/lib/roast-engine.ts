@@ -81,9 +81,11 @@ export async function getRoast(userId: string, memories: string[], bust = false)
   const promise = (async (): Promise<RoastResult> => {
     const userMemories = memories.slice(0, 15) // cap context to limit tokens
     const memoryContext = userMemories.join("\n")
-    const hasResults = memories.some(t => t.startsWith("[RESULT]"))
-    const hasPattern = memories.some(t => t.startsWith("[PATTERN]"))
-    const hasStreak  = memories.some(t => t.startsWith("[STREAK]"))
+    const hasResults  = memories.some(t => t.startsWith("[RESULT]"))
+    const hasPattern  = memories.some(t => t.startsWith("[PATTERN]"))
+    const hasStreak   = memories.some(t => t.startsWith("[STREAK]"))
+    const hasChampion = memories.some(t => t.startsWith("[CHAMPION_PICK]"))
+    const hasChampionResult = memories.some(t => t.startsWith("[CHAMPION_RESULT]"))
 
     let roast: string
     let degraded = false
@@ -99,6 +101,8 @@ ${!hasResults ? "• TIER 1 (predictions only, no results yet): Be lightly sarca
 ${hasResults && !hasPattern ? "• TIER 2 (results available): Call out specific wrong predictions by team name. Be pointed. No mercy for bad calls." : ""}
 ${hasPattern ? "• TIER 3 (pattern analysis available): This is the gold. Use the PATTERN analysis directly — name their bias, their blind spots, their recurring mistake. Be savage and specific." : ""}
 ${hasStreak ? "• STREAK rule: If they have a losing streak of 3+, roast it hard ('at this point just pick the opposite'). If they have a winning streak, give reluctant credit but add a 'but...'." : ""}
+${hasChampionResult ? "• CHAMPION VERDICT: Their World Cup 2026 champion pick has been resolved — lead with it. If WRONG: maximum brutality. If CORRECT: one sentence of grudging respect, then pivot to their match record." : ""}
+${hasChampion && !hasChampionResult ? "• CHAMPION rule: They have a locked champion pick — mention it. If their match accuracy is low, question whether this pick will age well. If they back a big favourite despite bad form, call out the lazy logic." : ""}
 
 Rules:
 - Never be generic. Every sentence must reference something specific from their history.
