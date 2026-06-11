@@ -1,11 +1,12 @@
 interface RoastCardProps {
   roast: string
   memoriesUsed: number
+  predictionCount?: number
   subtitle?: string
   timestamp?: number | null
 }
 
-export default function RoastCard({ roast, memoriesUsed, subtitle, timestamp }: RoastCardProps) {
+export default function RoastCard({ roast, memoriesUsed, predictionCount, subtitle, timestamp }: RoastCardProps) {
   const tsLabel = timestamp
     ? (() => {
         const d = new Date(timestamp)
@@ -24,10 +25,10 @@ export default function RoastCard({ roast, memoriesUsed, subtitle, timestamp }: 
     >
       <div className="flex items-center gap-2.5 mb-4 select-none">
         <div
-          className="flex items-center justify-center rounded-full text-white font-semibold shadow-md shadow-[#3B82F6]/10"
-          style={{ width: 32, height: 32, background: "#3B82F6", fontSize: 12, flexShrink: 0 }}
+          className="flex items-center justify-center rounded-full shadow-md shadow-[#3B82F6]/10"
+          style={{ width: 32, height: 32, background: "#3B82F6", flexShrink: 0 }}
         >
-          VAR
+          <img src="/logo.svg" alt="VAR" style={{ width: 20, height: "auto" }} />
         </div>
         <div>
           <div className="text-[13px] font-semibold text-white">
@@ -56,7 +57,10 @@ export default function RoastCard({ roast, memoriesUsed, subtitle, timestamp }: 
             className="animate-pulse"
           />
           <span className="text-[11px] text-neutral-500">
-            Based on {memoriesUsed} {memoriesUsed === 1 ? "record" : "records"} · Walrus Mainnet
+            {predictionCount !== undefined && predictionCount > 0
+              ? `${predictionCount} prediction${predictionCount !== 1 ? "s" : ""} · ${memoriesUsed} on-chain records`
+              : `Based on ${memoriesUsed} ${memoriesUsed === 1 ? "record" : "records"}`
+            }{" · Walrus Mainnet"}
           </span>
         </div>
         {tsLabel && (

@@ -1,10 +1,4 @@
-import { generateText } from "ai"
-import { createOpenAI } from "@ai-sdk/openai"
-
-const groq = createOpenAI({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: "https://api.groq.com/openai/v1",
-})
+import { generateWithFallback } from "./groq-generate"
 
 // Per-user roast cache (30 min) — avoids a Groq call on every page load.
 const roastCache = new Map<string, { roast: string; memoriesUsed: number; memories: string[]; ts: number }>()
@@ -94,10 +88,8 @@ export async function getRoast(userId: string, memories: string[], bust = false)
     let roast: string
     let degraded = false
     try {
-      const { text } = await generateText({
-        model: groq("llama-3.3-70b-versatile"),
-        maxRetries: 0, // fail fast: a 429 carries a long retry-after the AI SDK would WAIT on — serve the cached/fallback verdict instead of hanging
-        prompt: `You are VAR — Verified Agent Records. A ruthlessly honest football prediction referee who remembers EVERY call this user has ever made. Your job: roast them based solely on their actual track record below.
+      roast = await generateWithFallback(
+        `You are VAR — Verified Agent Records. A ruthlessly honest football prediction referee who remembers EVERY call this user has ever made. Your job: roast them based solely on their actual track record below.
 
 Prediction track record for user "${userId}":
 ${memoryContext}
@@ -113,9 +105,8 @@ Rules:
 - Mention specific team names they predicted.
 - Do NOT start with 'Hey' or any greeting. Start the roast directly.
 - Casual English only. Maximum 3 sentences.
-- The roast must be impossible to write without seeing this exact prediction history.`,
-      })
-      roast = text
+- The roast must be impossible to write without seeing this exact prediction history.`
+      )
       roastCache.set(userId, { roast, memoriesUsed: userMemories.length, memories: userMemories, ts: Date.now() })
     } catch (err) {
       console.error("Groq generation failed:", err)

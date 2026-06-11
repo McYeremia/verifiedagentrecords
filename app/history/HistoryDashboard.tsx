@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { useCurrentAccount, ConnectButton } from "@mysten/dapp-kit"
 import Link from "next/link"
@@ -34,10 +34,18 @@ type PredictionItem = {
   matchName: string
   predictedWinner: string
   confidence: string
-  status: "correct" | "wrong" | "pending"
-  actualResult?: string
   timestamp: string
   blobId?: string
+}
+
+type ResultItem = {
+  kind: "result"
+  matchName: string
+  actualWinner: string
+  score: string
+  predictedWinner: string
+  isCorrect: boolean
+  timestamp: string
 }
 
 type SnapshotItem = {
@@ -57,7 +65,7 @@ type ChampionItem = {
   blobId?: string
 }
 
-type TimelineItem = PredictionItem | SnapshotItem | ChampionItem
+type TimelineItem = PredictionItem | ResultItem | SnapshotItem | ChampionItem
 
 // ─── Parsers ───────────────────────────────────────────────────────────────
 
@@ -66,44 +74,51 @@ function buildTimeline(
   snapshots: RoastSnapshot[],
   blobMap: Map<string, string>,
 ): TimelineItem[] {
-  const resultMap: Record<string, { isCorrect: boolean; actualWinner: string; score: string }> = {}
-  for (const text of memories) {
-    if (!text.startsWith("[RESULT]")) continue
-    const midM = text.match(/Match ([\w_]+)/)
-    const correctM = text.match(/(CORRECT|WRONG)/)
-    const winnerM = text.match(/ended: (.+?) won (\d+)-(\d+)/)
-    if (midM && correctM && winnerM) {
-      resultMap[midM[1]] = {
-        isCorrect: correctM[1] === "CORRECT",
-        actualWinner: winnerM[1],
-        score: `${winnerM[2]}-${winnerM[3]}`,
-      }
-    }
-  }
-
+  // Prediction items — always shown as "prediction" regardless of result
   const predItems: PredictionItem[] = memories
     .filter(t => t.startsWith("[PREDICTION]"))
     .map(text => {
-      const midM   = text.match(/matchId: ([\w_]+)/)
+      const midM    = text.match(/matchId: ([\w_]+)/)
       const winnerM = text.match(/predicted (.+?) to win/)
       const teamsM  = text.match(/to win (.+?) \(matchId/)
       const confM   = text.match(/Confidence: (\w+)/)
       const tsM     = text.match(/Timestamp: (.+)$/)
       if (!midM || !winnerM) return null
-      const matchId = midM[1]
-      const result  = resultMap[matchId]
       return {
         kind: "prediction" as const,
-        matchName: teamsM?.[1] ?? matchId,
+        matchName: teamsM?.[1] ?? midM[1],
         predictedWinner: winnerM[1],
         confidence: confM?.[1] ?? "medium",
-        status: (result ? (result.isCorrect ? "correct" : "wrong") : "pending") as "correct" | "wrong" | "pending",
-        actualResult: result ? `${result.actualWinner} won ${result.score}` : undefined,
         timestamp: tsM?.[1]?.trim() ?? "",
         blobId: blobMap.get(text),
       }
     })
     .filter(Boolean) as PredictionItem[]
+
+  // Result items — separate bubble per resolved match (deduplicated by matchId)
+  const seenResultIds = new Set<string>()
+  const resultItems: ResultItem[] = []
+  for (const text of memories) {
+    if (!text.startsWith("[RESULT]")) continue
+    const midM     = text.match(/Match ([\w_]+)/)
+    if (!midM || seenResultIds.has(midM[1])) continue
+    seenResultIds.add(midM[1])
+    const matchNameM  = text.match(/Match [\w_]+ \((.+?)\) ended/)
+    const winnerM     = text.match(/ended: (.+?) won (\d+)-(\d+)/)
+    const predictedM  = text.match(/predicted (.+?) —/)
+    const correctM    = text.match(/(CORRECT|WRONG)/)
+    const tsM         = text.match(/Timestamp: (.+)$/)
+    if (!winnerM || !tsM) continue
+    resultItems.push({
+      kind: "result",
+      matchName: matchNameM?.[1] ?? midM[1],
+      actualWinner: winnerM[1],
+      score: `${winnerM[2]}-${winnerM[3]}`,
+      predictedWinner: predictedM?.[1] ?? "",
+      isCorrect: correctM?.[1] === "CORRECT",
+      timestamp: tsM[1].trim(),
+    })
+  }
 
   const snapItems: SnapshotItem[] = snapshots.map(s => ({
     kind: "snapshot" as const,
@@ -140,7 +155,7 @@ function buildTimeline(
     }
   }
 
-  return [...predItems, ...snapItems, ...championItems].sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+  return [...predItems, ...resultItems, ...snapItems, ...championItems].sort((a, b) => b.timestamp.localeCompare(a.timestamp))
 }
 
 function computeStats(memories: string[]) {
@@ -245,24 +260,19 @@ function UnifiedTimeline({ items, loading }: { items: TimelineItem[]; loading: b
           const timeStr = ts ? ts.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }) : ""
 
           if (item.kind === "prediction") {
-            const st = STATUS_STYLE[item.status]
             const confColor = CONFIDENCE_COLORS[item.confidence] ?? "#93C5FD"
             return (
               <div key={i} className="flex gap-3.5 pb-4 relative">
-                {/* Dot */}
+                {/* Dot — always blue (prediction is immutable, result is a separate bubble) */}
                 <div
                   className="w-[23px] h-[23px] rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 relative z-10"
-                  style={{
-                    background: `${st.color}18`,
-                    border: `1px solid ${st.color}40`,
-                  }}
+                  style={{ background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.35)" }}
                 >
-                  <i className={`ti ${st.icon}`} style={{ fontSize: 10, color: st.color }} />
+                  <i className="ti ti-target" style={{ fontSize: 10, color: "#3B82F6" }} />
                 </div>
 
                 {/* Card */}
                 <div className="flex-1 min-w-0">
-                  {/* Meta */}
                   <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                     <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.30)" }}>
                       Prediction
@@ -274,41 +284,83 @@ function UnifiedTimeline({ items, loading }: { items: TimelineItem[]; loading: b
                     )}
                     {item.blobId && <BlobProofLink blobId={item.blobId} />}
                   </div>
-                  {/* Body */}
                   <div
                     className="rounded-xl p-3.5 flex items-start justify-between gap-3"
                     style={{
                       background: "rgba(255,255,255,0.02)",
-                      border: `0.5px solid rgba(255,255,255,0.06)`,
-                      borderLeft: `2px solid ${st.color}`,
+                      border: "0.5px solid rgba(255,255,255,0.06)",
+                      borderLeft: "2px solid rgba(59,130,246,0.5)",
+                    }}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[12px] text-neutral-400 truncate">{item.matchName}</div>
+                      <div className="text-[14px] font-semibold text-white mt-0.5">{item.predictedWinner}</div>
+                    </div>
+                    <span
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                      style={{ background: `${confColor}15`, color: confColor }}
+                    >
+                      {item.confidence}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )
+          }
+
+          if (item.kind === "result") {
+            const color = item.isCorrect ? "#1D9E75" : "#EF4444"
+            const icon  = item.isCorrect ? "ti-check" : "ti-x"
+            const label = item.isCorrect ? "Correct" : "Wrong"
+            return (
+              <div key={`result-${i}`} className="flex gap-3.5 pb-4 relative">
+                <div
+                  className="w-[23px] h-[23px] rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 relative z-10"
+                  style={{
+                    background: isLast ? color : `${color}18`,
+                    border: `1px solid ${isLast ? color : `${color}40`}`,
+                    boxShadow: isLast ? `0 0 10px ${color}55` : "none",
+                  }}
+                >
+                  <i className={`ti ${icon}`} style={{ fontSize: 10, color: isLast ? "white" : color }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.30)" }}>
+                      Result
+                    </span>
+                    {dateStr && (
+                      <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.20)" }}>
+                        {dateStr} · {timeStr}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className="rounded-xl p-3.5 flex items-start justify-between gap-3"
+                    style={{
+                      background: `${color}06`,
+                      border: `0.5px solid ${color}25`,
+                      borderLeft: `2px solid ${color}`,
                     }}
                   >
                     <div className="min-w-0">
                       <div className="text-[12px] text-neutral-400 truncate">{item.matchName}</div>
                       <div className="text-[14px] font-semibold text-white mt-0.5">
-                        {item.predictedWinner}
+                        {item.actualWinner} won {item.score}
                       </div>
-                      {item.actualResult && (
-                        <div className="text-[11px] mt-1" style={{ color: "rgba(255,255,255,0.30)" }}>
-                          {item.actualResult}
+                      {item.predictedWinner && (
+                        <div className="text-[11px] mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>
+                          You picked {item.predictedWinner}
                         </div>
                       )}
                     </div>
-                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                      <span
-                        className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full"
-                        style={{ background: st.bg, color: st.color }}
-                      >
-                        <i className={`ti ${st.icon}`} style={{ fontSize: 9 }} />
-                        {st.label}
-                      </span>
-                      <span
-                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                        style={{ background: `${confColor}15`, color: confColor }}
-                      >
-                        {item.confidence}
-                      </span>
-                    </div>
+                    <span
+                      className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full flex-shrink-0"
+                      style={{ background: `${color}18`, color }}
+                    >
+                      <i className={`ti ${icon}`} style={{ fontSize: 9 }} />
+                      {label}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -459,6 +511,8 @@ export default function HistoryDashboard() {
     verdict: string | null
     overconfident: boolean
   } | null>(null)
+  // Fires at most once per mount — prevents repeated Groq calls on state re-renders
+  const gapFillAttempted = useRef(false)
 
   useEffect(() => {
     if (!userId) { setCalibration(null); return }
@@ -469,6 +523,30 @@ export default function HistoryDashboard() {
       .catch(() => {})
     return () => { cancelled = true }
   }, [userId])
+
+  // Gap detection: if there's a [RESULT] newer than the latest [ROAST_SNAPSHOT],
+  // the snapshot was not written during resolve (Groq 429/failure). Refresh the
+  // verdict silently in background — one attempt per page visit, non-blocking.
+  useEffect(() => {
+    if (!userId || memories.length === 0 || gapFillAttempted.current) return
+
+    const latestResultTs = memories
+      .filter(m => m.startsWith("[RESULT]") && m.includes(`User ${userId}`))
+      .map(m => m.match(/Timestamp: (.+)/)?.[1] ?? "")
+      .filter(Boolean)
+      .sort()
+      .at(-1)
+    if (!latestResultTs) return // no results yet
+
+    const latestSnapshotTs = snapshots.length > 0 ? snapshots[snapshots.length - 1].timestamp : ""
+    if (latestSnapshotTs >= latestResultTs) return // snapshot already covers latest result
+
+    gapFillAttempted.current = true
+    fetch(`/api/roast?userId=${encodeURIComponent(userId)}&bust=1`)
+      .then(r => r.json())
+      .then(d => { if (d.roast) setRoast(d.roast) })
+      .catch(() => {})
+  }, [userId, memories, snapshots])
 
   useEffect(() => {
     if (!userId) return
@@ -679,9 +757,9 @@ export default function HistoryDashboard() {
                   </div>
                   <div className="flex flex-col gap-2">
                     {[
-                      { color: "#94A3B8", icon: "ti-clock-hour-4", label: "Pending prediction"  },
-                      { color: "#1D9E75", icon: "ti-check",        label: "Correct prediction"  },
-                      { color: "#EF4444", icon: "ti-x",            label: "Wrong prediction"    },
+                      { color: "#3B82F6", icon: "ti-target",       label: "Prediction"          },
+                      { color: "#1D9E75", icon: "ti-check",        label: "Correct result"      },
+                      { color: "#EF4444", icon: "ti-x",            label: "Wrong result"        },
                       { color: "#FBBF24", icon: "ti-lock",         label: "Champion pick"       },
                       { color: "#3B82F6", icon: "ti-quote",        label: "VAR snapshot"        },
                       { color: "#EAB308", icon: "ti-trophy",       label: "After match result"  },
@@ -718,7 +796,12 @@ export default function HistoryDashboard() {
                 ) : (
                   <div className="relative group">
                     <div className="absolute inset-0 bg-[#3B82F6]/3 rounded-2xl filter blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-                    <RoastCard roast={roast} memoriesUsed={memoriesUsed} timestamp={roastTs} />
+                    <RoastCard
+                      roast={roast}
+                      memoriesUsed={memoriesUsed}
+                      predictionCount={memories.filter(m => m.startsWith("[PREDICTION]")).length}
+                      timestamp={roastTs}
+                    />
                   </div>
                 )}
               </div>

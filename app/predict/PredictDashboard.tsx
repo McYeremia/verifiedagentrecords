@@ -505,7 +505,11 @@ export default function PredictDashboard() {
                 ) : roast ? (
                   <div className="relative group">
                     <div className="absolute inset-0 bg-[#3B82F6]/3 rounded-2xl filter blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-                    <RoastCard roast={roast} memoriesUsed={memoriesUsed} />
+                    <RoastCard
+                      roast={roast}
+                      memoriesUsed={memoriesUsed}
+                      predictionCount={computeStats(memories).total}
+                    />
                   </div>
                 ) : null}
               </div>

@@ -72,10 +72,10 @@ export default function LiveRoastBanner() {
             <>
               <div className="flex items-center gap-2.5">
                 <div
-                  className="flex items-center justify-center rounded-lg text-white font-bold flex-shrink-0"
-                  style={{ width: 30, height: 30, background: "#3B82F6", fontSize: 10 }}
+                  className="flex items-center justify-center rounded-lg flex-shrink-0"
+                  style={{ width: 30, height: 30, background: "#3B82F6" }}
                 >
-                  VAR
+                  <img src="/logo.svg" alt="VAR" style={{ width: 18, height: "auto" }} />
                 </div>
                 <div>
                   <div className="text-[13px] font-semibold text-white">Verified Agent Records</div>

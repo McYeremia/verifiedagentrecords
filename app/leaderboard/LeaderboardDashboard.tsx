@@ -156,29 +156,46 @@ export default function LeaderboardDashboard() {
                 {entries.slice(0, 3).map((entry, i) => (
                   <div
                     key={entry.userId}
-                    className="rounded-2xl p-4 flex items-center gap-3 border backdrop-blur-xl transition-all duration-300 hover:scale-[1.02]"
+                    className="rounded-2xl p-4 border backdrop-blur-xl transition-all duration-300 hover:scale-[1.01]"
                     style={{
                       background: "rgba(255, 255, 255, 0.03)",
                       borderColor: i === 0 ? "rgba(59, 130, 246, 0.3)" : "rgba(255, 255, 255, 0.08)",
                     }}
                   >
-                    <span className="text-[12px] font-bold uppercase tracking-wider text-neutral-400 min-w-[3.25rem] select-none">{rankLabels[i]}</span>
-                    <div className="flex-1 min-w-0">
-                      <Link
-                        href={`/history?userId=${entry.userId}`}
-                        className="text-[13px] font-medium text-white hover:text-[#93C5FD] transition-colors truncate block"
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-[12px] font-bold uppercase tracking-wider text-neutral-400 min-w-[3.25rem] select-none">{rankLabels[i]}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-medium font-mono text-white truncate">
+                          {truncateAddress(entry.userId)}
+                        </div>
+                        <div className="text-[11px] text-neutral-400">
+                          {entry.predictions} predictions · {entry.correct} correct
+                        </div>
+                      </div>
+                      <div
+                        className="text-[15px] font-bold flex-shrink-0"
+                        style={{ color: i === 0 ? "#93C5FD" : rankColors[i] }}
                       >
-                        {truncateAddress(entry.userId)}
-                      </Link>
-                      <div className="text-[11px] text-neutral-400">
-                        {entry.predictions} predictions
+                        {entry.accuracy}%
                       </div>
                     </div>
-                    <div
-                      className="text-[15px] font-bold"
-                      style={{ color: i === 0 ? "#93C5FD" : rankColors[i] }}
-                    >
-                      {entry.accuracy}%
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/history?userId=${entry.userId}`}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-medium transition-all hover:opacity-80"
+                        style={{ background: "rgba(59,130,246,0.18)", color: "#93C5FD" }}
+                      >
+                        <i className="ti ti-history" style={{ fontSize: 11 }} />
+                        View History
+                      </Link>
+                      <Link
+                        href={`/h2h?b=${entry.userId}`}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-medium transition-all hover:opacity-80"
+                        style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.45)" }}
+                      >
+                        <i className="ti ti-arrows-exchange" style={{ fontSize: 11 }} />
+                        H2H
+                      </Link>
                     </div>
                   </div>
                 ))}
@@ -235,13 +252,13 @@ export default function LeaderboardDashboard() {
                   <div
                     className="grid px-5 py-3.5 border-b border-white/5"
                     style={{
-                      gridTemplateColumns: "3rem 1fr 6rem 5rem 5rem",
+                      gridTemplateColumns: "3rem 1fr 6rem 5rem 5rem 7rem",
                       gap: "1rem",
                       background: "rgba(255, 255, 255, 0.02)",
                     }}
                   >
-                    {["#", "Wallet Address", "Predictions", "Correct", "Accuracy"].map(h => (
-                      <div key={h} className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
+                    {["#", "Wallet Address", "Predictions", "Correct", "Accuracy", ""].map((h, idx) => (
+                      <div key={idx} className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
                         {h}
                       </div>
                     ))}
@@ -251,9 +268,9 @@ export default function LeaderboardDashboard() {
                   {entries.map((entry, i) => (
                     <div
                       key={entry.userId}
-                      className="grid items-center px-5 py-4 transition-colors duration-200 hover:bg-white/[0.05]"
+                      className="grid items-center px-5 py-3.5 transition-colors duration-200 hover:bg-white/[0.05]"
                       style={{
-                        gridTemplateColumns: "3rem 1fr 6rem 5rem 5rem",
+                        gridTemplateColumns: "3rem 1fr 6rem 5rem 5rem 7rem",
                         gap: "1rem",
                         borderBottom: i < entries.length - 1 ? "0.5px solid rgba(255, 255, 255, 0.05)" : undefined,
                         background: i === 0 ? "rgba(59, 130, 246, 0.08)" : "transparent",
@@ -265,12 +282,9 @@ export default function LeaderboardDashboard() {
                       >
                         {i < 3 ? (i === 0 ? "1st" : i === 1 ? "2nd" : "3rd") : `${i + 1}`}
                       </div>
-                      <Link
-                        href={`/history?userId=${entry.userId}`}
-                        className="text-[13px] font-medium font-mono text-neutral-200 hover:text-[#3B82F6] transition-colors truncate"
-                      >
+                      <div className="text-[13px] font-medium font-mono text-neutral-300 truncate">
                         {truncateAddress(entry.userId)}
-                      </Link>
+                      </div>
                       <div className="text-[13px] text-neutral-300">{entry.predictions}</div>
                       <div className="text-[13px] font-semibold text-[#1D9E75]">{entry.correct}</div>
                       <div
@@ -278,6 +292,24 @@ export default function LeaderboardDashboard() {
                         style={{ color: entry.accuracy >= 60 ? "#1D9E75" : entry.accuracy >= 40 ? "#93C5FD" : "#3B82F6" }}
                       >
                         {entry.accuracy}%
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Link
+                          href={`/history?userId=${entry.userId}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all hover:opacity-80"
+                          style={{ background: "rgba(59,130,246,0.18)", color: "#93C5FD", whiteSpace: "nowrap" }}
+                        >
+                          <i className="ti ti-history" style={{ fontSize: 11 }} />
+                          View
+                        </Link>
+                        <Link
+                          href={`/h2h?b=${entry.userId}`}
+                          className="inline-flex items-center justify-center px-2 py-1.5 rounded-lg text-[11px] transition-all hover:opacity-80"
+                          style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.40)" }}
+                          title="Head to head"
+                        >
+                          <i className="ti ti-arrows-exchange" style={{ fontSize: 11 }} />
+                        </Link>
                       </div>
                     </div>
                   ))}

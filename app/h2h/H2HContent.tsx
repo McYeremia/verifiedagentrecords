@@ -180,6 +180,7 @@ export default function H2HContent() {
 
   const [dataA, setDataA] = useState<UserData>(emptyUser(addrA))
   const [dataB, setDataB] = useState<UserData>(emptyUser(addrB))
+  const [shareUrl, setShareUrl] = useState<string>("")
 
   const fetchUser = useCallback(async (userId: string, setter: (d: UserData) => void) => {
     if (!userId) return
@@ -214,6 +215,11 @@ export default function H2HContent() {
   useEffect(() => {
     if (!addrA && walletAddress) setInputA(walletAddress)
   }, [walletAddress, addrA])
+
+  // Set share URL only on client to avoid hydration mismatch
+  useEffect(() => {
+    setShareUrl(window.location.href)
+  }, [addrA, addrB])
 
   const handleCompare = () => {
     const a = inputA.trim()
@@ -398,13 +404,11 @@ export default function H2HContent() {
                   className="text-[11px] font-mono truncate flex-1"
                   style={{ color: "rgba(255,255,255,0.35)" }}
                 >
-                  {typeof window !== "undefined" ? window.location.href : ""}
+                  {shareUrl}
                 </span>
                 <button
                   onClick={() => {
-                    if (typeof window !== "undefined") {
-                      navigator.clipboard.writeText(window.location.href).catch(() => {})
-                    }
+                    if (shareUrl) navigator.clipboard.writeText(shareUrl).catch(() => {})
                   }}
                   className="text-[11px] flex-shrink-0 transition-colors hover:text-white"
                   style={{ color: "rgba(255,255,255,0.35)" }}

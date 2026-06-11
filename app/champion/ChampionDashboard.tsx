@@ -104,47 +104,8 @@ export default function ChampionDashboard() {
     }
   }
 
-  // No wallet connected
-  if (!userId) {
-    return (
-      <>
-        <Navbar />
-        <div className="dark bg-grid-pattern relative overflow-hidden" style={{ background: "#040810", minHeight: "calc(100vh - 65px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <PageBg />
-          <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] rounded-full bg-[#3B82F6] opacity-[0.05] dark:opacity-[0.1] blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
-          <div className="absolute bottom-[20%] right-[-10%] w-[450px] h-[450px] rounded-full bg-[#1D9E75] opacity-[0.03] dark:opacity-[0.06] blur-[120px] pointer-events-none -z-10 animate-pulse-glow delay-300" />
-          <main className="max-w-2xl mx-auto px-4 sm:px-6 py-28 flex flex-col items-center gap-6 text-center relative animate-fade-in-up" style={{ zIndex: 1 }}>
-            <div
-              className="flex items-center justify-center rounded-full"
-              style={{ width: 72, height: 72, background: "rgba(59,130,246,0.10)", border: "1px solid rgba(59,130,246,0.18)" }}
-            >
-              <i className="ti ti-trophy" style={{ fontSize: 32, color: "#3B82F6" }} />
-            </div>
-            <h1 className="text-[28px] font-medium text-white">Who wins it all?</h1>
-            <p className="text-[14px] max-w-xs" style={{ color: "rgba(255,255,255,0.40)" }}>
-              Connect your Sui wallet to lock in your World Cup 2026 champion pick. VAR will remember forever.
-            </p>
-            <ConnectButton
-              connectText="Connect Sui Wallet"
-              style={{
-                background: "#3B82F6",
-                color: "white",
-                borderRadius: "99px",
-                fontSize: "13px",
-                fontWeight: "500",
-                padding: "10px 24px",
-                border: "none",
-                cursor: "pointer",
-              }}
-            />
-          </main>
-        </div>
-      </>
-    )
-  }
-
   // Already locked in — show pick (instant for cached users, no loading state)
-  if (currentPick) {
+  if (userId && currentPick) {
     return (
       <>
         <Navbar />
@@ -240,8 +201,17 @@ export default function ChampionDashboard() {
             >
               World Cup 2026 · Champion Pick · {TEAMS.length} Teams
             </div>
-            <h1 className="text-[44px] sm:text-[58px] font-medium text-white leading-tight mb-4">
-              Who wins it all?
+            <h1 className="text-[44px] sm:text-[58px] font-medium leading-tight mb-4">
+              <span style={{ color: "rgba(255,255,255,0.55)" }}>Pick your </span>
+              <span
+                className="font-extrabold"
+                style={{
+                  color: "#FBBF24",
+                  textShadow: "0 0 40px rgba(251,191,36,0.55), 0 0 80px rgba(245,158,11,0.30)",
+                }}
+              >
+                Champion
+              </span>
             </h1>
             <p className="text-[15px] max-w-md mx-auto" style={{ color: "rgba(255,255,255,0.38)" }}>
               Pick one team. Your call is locked in forever on Walrus Mainnet —
@@ -310,18 +280,34 @@ export default function ChampionDashboard() {
                     <div className="text-[11px] text-neutral-400">{selectedTeam}</div>
                   </div>
                 </div>
-                <button
-                  onClick={handleLockIn}
-                  disabled={submitting}
-                  className="inline-flex items-center gap-2 text-white text-[13px] font-medium transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-50"
-                  style={{ background: "#3B82F6", padding: "11px 28px", borderRadius: 99 }}
-                >
-                  <i
-                    className={`ti ${submitting ? "ti-loader animate-slow-spin" : "ti-lock"}`}
-                    style={{ fontSize: 14 }}
+                {userId ? (
+                  <button
+                    onClick={handleLockIn}
+                    disabled={submitting}
+                    className="inline-flex items-center gap-2 text-white text-[13px] font-medium transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-50"
+                    style={{ background: "#3B82F6", padding: "11px 28px", borderRadius: 99 }}
+                  >
+                    <i
+                      className={`ti ${submitting ? "ti-loader animate-slow-spin" : "ti-lock"}`}
+                      style={{ fontSize: 14 }}
+                    />
+                    {submitting ? "Confirming..." : "Lock In Pick"}
+                  </button>
+                ) : (
+                  <ConnectButton
+                    connectText="Connect to Lock In"
+                    style={{
+                      background: "#3B82F6",
+                      color: "white",
+                      borderRadius: "99px",
+                      fontSize: "13px",
+                      fontWeight: "500",
+                      padding: "11px 28px",
+                      border: "none",
+                      cursor: "pointer",
+                    }}
                   />
-                  {submitting ? "Confirming..." : "Confirm Pick"}
-                </button>
+                )}
               </>
             ) : (
               <p

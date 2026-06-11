@@ -1,14 +1,8 @@
 import { NextResponse } from "next/server"
 import { getMemWal } from "../../../lib/memwal"
 import { getMatchByApiId } from "../../../lib/matches"
-import { generateText } from "ai"
-import { createOpenAI } from "@ai-sdk/openai"
 import { saveRoastSnapshot } from "../../../lib/roast-snapshot"
-
-const groq = createOpenAI({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: "https://api.groq.com/openai/v1",
-})
+import { generateWithFallback } from "../../../lib/groq-generate"
 
 // 1-minute in-memory cooldown to prevent abuse
 let lastSyncTime = 0
@@ -106,19 +100,25 @@ export async function GET() {
         const userResultTexts = (userResults.results ?? []).filter(
           (r: { text: string }) => r.text.startsWith("[RESULT]") && r.text.includes(`User ${userId}`)
         )
-        const resultCount = userResultTexts.length
-        const correctCount = userResultTexts.filter(
+        // Deduplicate by matchId — same match resolved multiple times must count as one
+        const seenMids = new Set<string>()
+        const uniqueResultTexts = userResultTexts.filter((r: { text: string }) => {
+          const mid = r.text.match(/Match ([\w_]+)/)?.[1]
+          if (!mid || seenMids.has(mid)) return false
+          seenMids.add(mid)
+          return true
+        })
+        const resultCount = uniqueResultTexts.length
+        const correctCount = uniqueResultTexts.filter(
           (r: { text: string }) => r.text.includes("— CORRECT")
         ).length
 
         if (resultCount > 0 && resultCount % 3 === 0) {
           const allMem = await mem.recall({ query: `User ${userId} predictions results wins losses` })
           const ctx = (allMem.results ?? []).map((m: { text: string }) => m.text).join("\n")
-          const { text: insight } = await generateText({
-            model: groq("llama-3.3-70b-versatile"),
-            maxRetries: 0, // fail fast on a 429 retry-after so the cron sync doesn't hang past its timeout; PATTERN is non-fatal
-            prompt: `Analyze the football prediction patterns of user "${userId}":\n\n${ctx}\n\nWrite 1-2 sentences about their prediction bias. Use casual English with a sarcastic tone.`,
-          })
+          const insight = await generateWithFallback(
+            `Analyze the football prediction patterns of user "${userId}":\n\n${ctx}\n\nWrite 1-2 sentences about their prediction bias. Use casual English with a sarcastic tone.`
+          )
           const patternText = `[PATTERN] User ${userId} after ${resultCount} predictions: ${correctCount} correct, ${resultCount - correctCount} wrong (${Math.round((correctCount / resultCount) * 100)}% accuracy). Pattern analysis: ${insight} Timestamp: ${new Date().toISOString()}`
           const pJob = await mem.remember(patternText)
           await mem.waitForRememberJob(pJob.job_id)

@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getMemWal } from "../../../lib/memwal"
 import { getMatchById } from "../../../lib/matches"
-import { generateText } from "ai"
-import { createOpenAI } from "@ai-sdk/openai"
 import { saveRoastSnapshot } from "../../../lib/roast-snapshot"
-
-const groq = createOpenAI({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: "https://api.groq.com/openai/v1",
-})
+import { generateWithFallback } from "../../../lib/groq-generate"
 
 export async function POST(req: NextRequest) {
   const adminSecret = req.headers.get("x-admin-secret")
@@ -137,11 +131,9 @@ export async function POST(req: NextRequest) {
 
         const wrongCount = resultCount - userCorrectCount
 
-        const { text: patternInsight } = await generateText({
-          model: groq("llama-3.3-70b-versatile"),
-          maxRetries: 0, // fail fast on a 429 retry-after so resolve doesn't hang; PATTERN is non-fatal
-          prompt: `Analyze the football prediction patterns of user "${userId}" based on the following track record:\n\n${memoryContext}\n\nWrite 1-2 sentences describing their prediction patterns or biases. Focus on: teams they frequently back, whether they overestimate or underestimate certain teams, accuracy patterns. Use casual English with a slightly sarcastic tone.`,
-        })
+        const patternInsight = await generateWithFallback(
+          `Analyze the football prediction patterns of user "${userId}" based on the following track record:\n\n${memoryContext}\n\nWrite 1-2 sentences describing their prediction patterns or biases. Focus on: teams they frequently back, whether they overestimate or underestimate certain teams, accuracy patterns. Use casual English with a slightly sarcastic tone.`
+        )
 
         const patternText = `[PATTERN] User ${userId} after ${resultCount} predictions: ${userCorrectCount} correct, ${wrongCount} wrong (${Math.round((userCorrectCount / resultCount) * 100)}% accuracy). Pattern analysis: ${patternInsight} Timestamp: ${new Date().toISOString()}`
 

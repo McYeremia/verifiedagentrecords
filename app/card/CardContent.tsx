@@ -227,10 +227,10 @@ export default function CardContent() {
                 <div className="flex items-center justify-between mb-5 pb-4 border-b border-white/5 gap-3">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div
-                      className="flex items-center justify-center rounded-lg text-white font-semibold flex-shrink-0 shadow-md shadow-[#3B82F6]/10"
-                      style={{ width: 32, height: 32, background: "#3B82F6", fontSize: 11 }}
+                      className="flex items-center justify-center rounded-lg flex-shrink-0 shadow-md shadow-[#3B82F6]/10"
+                      style={{ width: 32, height: 32, background: "#3B82F6" }}
                     >
-                      VAR
+                      <img src="/logo.svg" alt="VAR" style={{ width: 20, height: "auto" }} />
                     </div>
                     <div className="min-w-0">
                       <div className="text-[13px] font-semibold text-white truncate">Verified Agent Records</div>

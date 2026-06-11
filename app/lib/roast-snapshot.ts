@@ -1,13 +1,7 @@
-import { generateText } from "ai"
-import { createOpenAI } from "@ai-sdk/openai"
 import { getMemWal } from "./memwal"
+import { generateWithFallback } from "./groq-generate"
 
 export type SnapshotTrigger = "PREDICTION" | "RESULT" | "PATTERN"
-
-const groq = createOpenAI({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: "https://api.groq.com/openai/v1",
-})
 
 export async function saveRoastSnapshot(
   userId: string,
@@ -25,10 +19,8 @@ export async function saveRoastSnapshot(
   const hasStreak  = userMemories.some(m => m.startsWith("[STREAK]"))
   const memoryContext = userMemories.slice(0, 15).join("\n")
 
-  const { text: roastText } = await generateText({
-    model: groq("llama-3.3-70b-versatile"),
-    maxRetries: 0, // fail fast: a 429 sends a long retry-after, and the AI SDK would WAIT on it (30s hang on the prediction POST). Snapshot write is non-fatal — skip retry.
-    prompt: `You are VAR — Verified Agent Records. A ruthlessly honest football prediction referee who remembers EVERY call this user has made.
+  const roastText = await generateWithFallback(
+    `You are VAR — Verified Agent Records. A ruthlessly honest football prediction referee who remembers EVERY call this user has made.
 
 Prediction track record for user "${userId}":
 ${memoryContext}
@@ -39,8 +31,8 @@ ${hasResults && !hasPattern ? "• TIER 2 (results in): Call out specific wrong 
 ${hasPattern ? "• TIER 3 (pattern analysis available): Use the PATTERN memory directly. Be savage and specific about their recurring bias." : ""}
 ${hasStreak ? "• Include the streak if notable (3+ games losing or winning)." : ""}
 
-Start directly — no greeting. Casual English. Max 2 sentences. Must reference specific teams from their history.`,
-  })
+Start directly — no greeting. Casual English. Max 2 sentences. Must reference specific teams from their history.`
+  )
 
   const mem = getMemWal()
   const snapshotText = `[ROAST_SNAPSHOT] User ${userId} after ${predCount} predictions (${trigger}): ${roastText} Timestamp: ${new Date().toISOString()}`
