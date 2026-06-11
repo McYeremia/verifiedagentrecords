@@ -721,15 +721,17 @@ export default function HistoryDashboard() {
                   </div>
                 </div>
 
-                {/* Share */}
-                <Link
-                  href={`/card?userId=${encodeURIComponent(userId)}`}
-                  className="group flex items-center justify-center gap-2 text-[13px] font-semibold py-3 rounded-full w-full transition-all duration-300 active:scale-[0.97] hover:shadow-lg hover:shadow-[#3B82F6]/20"
-                  style={{ background: "#3B82F6", color: "white" }}
-                >
-                  <i className="ti ti-share transition-transform group-hover:rotate-12" />
-                  Share Verdict Card
-                </Link>
+                {/* Share — only shown for own profile */}
+                {(!urlUserId || urlUserId === walletUserId) && (
+                  <Link
+                    href={`/card?userId=${encodeURIComponent(userId)}`}
+                    className="group flex items-center justify-center gap-2 text-[13px] font-semibold py-3 rounded-full w-full transition-all duration-300 active:scale-[0.97] hover:shadow-lg hover:shadow-[#3B82F6]/20"
+                    style={{ background: "#3B82F6", color: "white" }}
+                  >
+                    <i className="ti ti-share transition-transform group-hover:rotate-12" />
+                    Share Verdict Card
+                  </Link>
+                )}
 
                 {/* Walrus proof */}
                 <div className="rounded-2xl p-4 border border-white/10" style={{ background: "rgba(255,255,255,0.03)" }}>
