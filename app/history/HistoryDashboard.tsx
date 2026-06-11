@@ -12,6 +12,14 @@ function truncateAddress(addr: string) {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
 }
 
+// On-chain proof: every memory lives in a real Walrus blob on Mainnet.
+// Walruscan is the canonical Walrus explorer; the aggregator serves the raw
+// (SEAL-encrypted) bytes the SDK itself downloads — proof the blob exists.
+const walruscanUrl = (blobId: string) => `https://walruscan.com/mainnet/blob/${blobId}`
+const shortBlob = (blobId: string) => `${blobId.slice(0, 6)}…${blobId.slice(-4)}`
+
+type RecalledMem = { text: string; blob_id: string }
+
 interface RoastSnapshot {
   roast: string
   trigger: string
@@ -29,6 +37,7 @@ type PredictionItem = {
   status: "correct" | "wrong" | "pending"
   actualResult?: string
   timestamp: string
+  blobId?: string
 }
 
 type SnapshotItem = {
@@ -45,13 +54,18 @@ type ChampionItem = {
   status: "locked" | "correct" | "wrong"
   actualWinner?: string
   timestamp: string
+  blobId?: string
 }
 
 type TimelineItem = PredictionItem | SnapshotItem | ChampionItem
 
 // ─── Parsers ───────────────────────────────────────────────────────────────
 
-function buildTimeline(memories: string[], snapshots: RoastSnapshot[]): TimelineItem[] {
+function buildTimeline(
+  memories: string[],
+  snapshots: RoastSnapshot[],
+  blobMap: Map<string, string>,
+): TimelineItem[] {
   const resultMap: Record<string, { isCorrect: boolean; actualWinner: string; score: string }> = {}
   for (const text of memories) {
     if (!text.startsWith("[RESULT]")) continue
@@ -86,6 +100,7 @@ function buildTimeline(memories: string[], snapshots: RoastSnapshot[]): Timeline
         status: (result ? (result.isCorrect ? "correct" : "wrong") : "pending") as "correct" | "wrong" | "pending",
         actualResult: result ? `${result.actualWinner} won ${result.score}` : undefined,
         timestamp: tsM?.[1]?.trim() ?? "",
+        blobId: blobMap.get(text),
       }
     })
     .filter(Boolean) as PredictionItem[]
@@ -120,6 +135,7 @@ function buildTimeline(memories: string[], snapshots: RoastSnapshot[]): Timeline
         status,
         actualWinner,
         timestamp: tsM[1].trim(),
+        blobId: blobMap.get(championPickText),
       })
     }
   }
@@ -164,6 +180,26 @@ const TRIGGER_META: Record<string, { label: string; color: string; icon: string 
   PREDICTION: { label: "VAR snapshot",      color: "#3B82F6", icon: "ti-quote"    },
   RESULT:     { label: "After result",      color: "#EAB308", icon: "ti-trophy"   },
   PATTERN:    { label: "Pattern detected",  color: "#EF4444", icon: "ti-flame"    },
+}
+
+// Tiny "verify this exact record on Walrus" link — appears on every memory that
+// carries a real blob_id. Clicking opens the blob on Walruscan (the explorer),
+// proving this individual prediction lives on Walrus Mainnet, not a database.
+function BlobProofLink({ blobId }: { blobId: string }) {
+  return (
+    <a
+      href={walruscanUrl(blobId)}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={e => e.stopPropagation()}
+      title={`Verify on Walrus — blob ${blobId}`}
+      className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded-full transition-colors duration-200"
+      style={{ background: "rgba(29,158,117,0.10)", color: "#34D399", border: "0.5px solid rgba(29,158,117,0.25)" }}
+    >
+      <i className="ti ti-shield-check" style={{ fontSize: 9 }} />
+      {shortBlob(blobId)}
+    </a>
+  )
 }
 
 // ─── Unified Timeline ──────────────────────────────────────────────────────
@@ -236,6 +272,7 @@ function UnifiedTimeline({ items, loading }: { items: TimelineItem[]; loading: b
                         {dateStr} · {timeStr}
                       </span>
                     )}
+                    {item.blobId && <BlobProofLink blobId={item.blobId} />}
                   </div>
                   {/* Body */}
                   <div
@@ -309,6 +346,7 @@ function UnifiedTimeline({ items, loading }: { items: TimelineItem[]; loading: b
                         {dateStr} · {timeStr}
                       </span>
                     )}
+                    {item.blobId && <BlobProofLink blobId={item.blobId} />}
                   </div>
                   <div
                     className="rounded-xl p-3.5 flex items-start justify-between gap-3"
@@ -410,6 +448,7 @@ export default function HistoryDashboard() {
   const [roast, setRoast]               = useState<string>("No predictions yet. Too scared to be wrong?")
   const [memoriesUsed, setMemoriesUsed] = useState(0)
   const [memories, setMemories]         = useState<string[]>([])
+  const [records, setRecords]           = useState<RecalledMem[]>([])
   const [snapshots, setSnapshots]       = useState<RoastSnapshot[]>([])
   const [roastTs, setRoastTs]           = useState<number | null>(null)
   const [loading, setLoading]           = useState(false)
@@ -449,8 +488,9 @@ export default function HistoryDashboard() {
     try {
       const hit = localStorage.getItem(cacheKey)
       if (hit) {
-        const c = JSON.parse(hit) as { memories?: string[]; snapshots?: RoastSnapshot[] }
+        const c = JSON.parse(hit) as { memories?: string[]; records?: RecalledMem[]; snapshots?: RoastSnapshot[] }
         if (Array.isArray(c.memories)) { setMemories(c.memories); setMemoriesUsed(c.memories.length) }
+        if (Array.isArray(c.records)) setRecords(c.records)
         if (Array.isArray(c.snapshots)) {
           setSnapshots(c.snapshots)
           const latest = c.snapshots[c.snapshots.length - 1]
@@ -468,7 +508,9 @@ export default function HistoryDashboard() {
         if (cancelled) return
         if (Array.isArray(d.memories) && !(d.rateLimited && d.memories.length === 0)) {
           setMemories(d.memories); setMemoriesUsed(d.memories.length)
-          patchCache({ memories: d.memories })
+          const recs: RecalledMem[] = Array.isArray(d.records) ? d.records : []
+          setRecords(recs)
+          patchCache({ memories: d.memories, records: recs })
         }
       })
       .catch(() => {})
@@ -530,8 +572,14 @@ export default function HistoryDashboard() {
   }
 
   const { total, correct, accuracy } = computeStats(memories)
-  const timeline = buildTimeline(memories, snapshots)
+  const blobMap = new Map(records.filter(r => r.blob_id).map(r => [r.text, r.blob_id]))
+  const timeline = buildTimeline(memories, snapshots, blobMap)
   const timelineLoading = loading || snapshotsLoading
+  // A real blob to anchor the sidebar proof link — prefer the user's own
+  // prediction, fall back to any record that carries a blob_id.
+  const verifiableBlob =
+    records.find(r => r.blob_id && r.text.startsWith("[PREDICTION]"))?.blob_id ??
+    records.find(r => r.blob_id)?.blob_id ?? null
 
   return (
     <>
@@ -598,6 +646,30 @@ export default function HistoryDashboard() {
                       : <>No records yet. Make a prediction and VAR will track it forever.</>
                     }
                   </p>
+
+                  {verifiableBlob && (
+                    <>
+                      <a
+                        href={walruscanUrl(verifiableBlob)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group mt-3 flex items-center justify-between gap-2 rounded-xl px-3 py-2 transition-colors duration-200"
+                        style={{ background: "rgba(29,158,117,0.08)", border: "0.5px solid rgba(29,158,117,0.22)" }}
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <i className="ti ti-shield-check flex-shrink-0" style={{ fontSize: 13, color: "#34D399" }} />
+                          <span className="flex flex-col min-w-0">
+                            <span className="text-[11px] font-semibold" style={{ color: "#34D399" }}>Verify on Walrus Explorer</span>
+                            <span className="text-[10px] font-mono truncate" style={{ color: "rgba(255,255,255,0.30)" }}>{shortBlob(verifiableBlob)}</span>
+                          </span>
+                        </span>
+                        <i className="ti ti-external-link flex-shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }} />
+                      </a>
+                      <p className="text-[10px] mt-2 leading-relaxed" style={{ color: "rgba(255,255,255,0.28)" }}>
+                        Each record is encrypted (SEAL) on-chain — the explorer proves the blob exists; VAR decrypts it for you here.
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 {/* VAR signal key */}

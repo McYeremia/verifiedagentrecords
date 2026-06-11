@@ -6,7 +6,6 @@ import CountdownTimer from "./components/CountdownTimer"
 import ScrollProgress from "./components/ScrollProgress"
 import AnimatedSection from "./components/AnimatedSection"
 import AnimatedCounter from "./components/AnimatedCounter"
-import LiveRoastBanner from "./components/LiveRoastBanner"
 import { getUpcomingMatches } from "./lib/matches"
 
 const FEATURES = [
@@ -571,7 +570,6 @@ export default function Home() {
                 Example roasts — with your actual history, VAR gets more specific and more brutal.
               </p>
 
-              <LiveRoastBanner />
             </AnimatedSection>
             </div>
           </section>

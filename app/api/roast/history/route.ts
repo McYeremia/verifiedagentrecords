@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getMemWal } from "../../../lib/memwal"
+import { recallUserMemories } from "../../../lib/memwal"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -7,14 +7,11 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 })
 
   try {
-    const mem = getMemWal()
-    const result = await mem.recall({
-      query: `ROAST_SNAPSHOT User ${userId} after predictions`,
-      limit: 200, // full timeline — default 10 (by relevance) would drop older snapshots
-    })
+    // Uses shared 45s cache (limit: 200) — no extra Walrus request vs /api/memories
+    // on a /history page load that already called the shared recall.
+    const memories = await recallUserMemories(userId)
 
-    const snapshots = (result.results ?? [])
-      .map((r: { text: string }) => r.text)
+    const snapshots = memories
       .filter((t: string) => t.startsWith("[ROAST_SNAPSHOT]") && t.includes(userId))
       .map((text: string) => {
         const predCountM = text.match(/after (\d+) predictions/)

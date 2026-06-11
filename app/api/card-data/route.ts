@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getMemWal } from "../../lib/memwal"
+import { recallUserMemories } from "../../lib/memwal"
 
 // Returns roast from latest saved snapshot + stats from leaderboard.
 // Zero Groq calls — reads only from Walrus memory.
@@ -8,18 +8,12 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 })
 
   try {
-    const mem = getMemWal()
-
-    const [snapshotRes, lbRes] = await Promise.all([
-      // Need every snapshot so the newest-by-timestamp is actually the latest —
-      // default 10 (by relevance) can omit the most recent verdict.
-      mem.recall({ query: `ROAST_SNAPSHOT User ${userId} after predictions`, limit: 200 }),
-      mem.recall({ query: `LEADERBOARD User ${userId} predictions correct accuracy`, limit: 200 }),
-    ])
+    // Single shared recall (45s cache, limit:200) — replaces two direct mem.recall()
+    // calls that bypassed the cache and doubled the Walrus request count on landing.
+    const memories = await recallUserMemories(userId)
 
     // Parse snapshots, keep only this user's, sort newest first
-    const snapshots = (snapshotRes.results ?? [])
-      .map((r: { text: string }) => r.text)
+    const snapshots = memories
       .filter((t: string) => t.startsWith("[ROAST_SNAPSHOT]") && t.includes(userId))
       .map((text: string) => {
         const predCountM = text.match(/after (\d+) predictions/)
@@ -41,8 +35,7 @@ export async function GET(req: NextRequest) {
     const latest = snapshots[0] ?? null
 
     // Parse stats from latest leaderboard entry for this user
-    const lbTexts: string[] = (lbRes.results ?? [])
-      .map((r: { text: string }) => r.text)
+    const lbTexts: string[] = memories
       .filter((t: string) => t.startsWith("[LEADERBOARD]") && t.includes(userId))
 
     let stats = { total: 0, correct: 0, wrong: 0, accuracy: 0 }
@@ -66,6 +59,12 @@ export async function GET(req: NextRequest) {
       stats,
     })
   } catch {
-    return NextResponse.json({ error: "Failed to fetch card data" }, { status: 500 })
+    // Graceful degradation under Walrus 429 — serve empty state rather than 500
+    // so LiveRoastBanner keeps showing the localStorage paint cache instead of erroring.
+    return NextResponse.json({
+      roast: "", trigger: null, predictionCount: 0, memoriesUsed: 0,
+      stats: { total: 0, correct: 0, wrong: 0, accuracy: 0 },
+      rateLimited: true,
+    })
   }
 }

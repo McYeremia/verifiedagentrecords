@@ -10,6 +10,30 @@ import {
 const SESSION_KEY = "var-wallet-session-start"
 const SESSION_MS = 24 * 60 * 60 * 1000 // 24 hours — fixed window from connect
 
+// Increment this whenever the Walrus namespace changes so all cached data
+// (leaderboard, card, champion, predicted-matches, history) is wiped automatically.
+const STORAGE_VERSION = "v2"
+const STORAGE_VERSION_KEY = "var-storage-version"
+
+function clearStaleStorage() {
+  try {
+    const stored = localStorage.getItem(STORAGE_VERSION_KEY)
+    if (stored === STORAGE_VERSION) return
+    // Version mismatch — clear every var-* key except the version marker itself
+    const toRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith("var-") && key !== STORAGE_VERSION_KEY) toRemove.push(key)
+    }
+    toRemove.forEach(k => localStorage.removeItem(k))
+    localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION)
+  } catch { /* ignore */ }
+}
+
+// Run immediately at module load (client-side) so stale cache is wiped before
+// any component reads localStorage — prevents a flash of old namespace data.
+if (typeof window !== "undefined") clearStaleStorage()
+
 /**
  * Gives the wallet connection a 24-hour session. The session starts when the
  * wallet connects and is stored in localStorage so it survives reloads. Once

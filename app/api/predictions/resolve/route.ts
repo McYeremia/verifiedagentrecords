@@ -74,10 +74,32 @@ export async function POST(req: NextRequest) {
       const { predictedWinner } = userPredictions[userId]
       const isCorrect = predictedWinner.toLowerCase() === actualWinner.toLowerCase()
 
-      const resultText = `[RESULT] Match ${matchId} (${match.homeTeam} vs ${match.awayTeam}) ended: ${actualWinner} won ${homeScore}-${awayScore}. User ${userId} predicted ${predictedWinner} — ${isCorrect ? "CORRECT" : "WRONG"}. Timestamp: ${new Date().toISOString()}`
+      // Dedup guard — skip [RESULT] write if this match is already resolved for this user.
+      // Check for [LEADERBOARD] too: if RESULT exists but LEADERBOARD is missing (e.g. a
+      // prior resolve timed out mid-write), fall through so the leaderboard gets written.
+      const existCheck = await mem.recall({
+        query: `RESULT LEADERBOARD Match ${matchId} User ${userId}`,
+        limit: 200,
+      })
+      const hasResult = (existCheck.results ?? []).some(
+        (r: { text: string }) =>
+          r.text.startsWith("[RESULT]") &&
+          r.text.includes(`Match ${matchId}`) &&
+          r.text.includes(`User ${userId}`)
+      )
+      const hasLeaderboard = (existCheck.results ?? []).some(
+        (r: { text: string }) =>
+          r.text.startsWith("[LEADERBOARD]") &&
+          r.text.includes(`User ${userId}`)
+      )
+      if (hasResult && hasLeaderboard) continue // fully processed — skip
 
-      const resultJob = await mem.remember(resultText)
-      await mem.waitForRememberJob(resultJob.job_id)
+      // Only write [RESULT] if it doesn't already exist
+      if (!hasResult) {
+        const resultText = `[RESULT] Match ${matchId} (${match.homeTeam} vs ${match.awayTeam}) ended: ${actualWinner} won ${homeScore}-${awayScore}. User ${userId} predicted ${predictedWinner} — ${isCorrect ? "CORRECT" : "WRONG"}. Timestamp: ${new Date().toISOString()}`
+        const resultJob = await mem.remember(resultText)
+        await mem.waitForRememberJob(resultJob.job_id)
+      }
 
       // Count total resolved results for this user
       const userResults = await mem.recall({
@@ -85,14 +107,20 @@ export async function POST(req: NextRequest) {
         limit: 200, // full result history drives accuracy + the every-3rd PATTERN trigger
       })
 
-      const resultCount = (userResults.results || []).filter(
-        (r: { text: string }) => r.text.startsWith("[RESULT]") && r.text.includes(`User ${userId}`)
-      ).length
-
       const filteredResults = (userResults.results || []).filter(
         (r: { text: string }) => r.text.startsWith("[RESULT]") && r.text.includes(`User ${userId}`)
       )
-      const userCorrectCount = filteredResults.filter(
+      // Deduplicate by matchId — a match resolved multiple times (e.g. during testing)
+      // must count as one resolved prediction, not N.
+      const seenMatchIds = new Set<string>()
+      const uniqueResults = filteredResults.filter((r: { text: string }) => {
+        const mid = r.text.match(/Match ([\w_]+)/)?.[1]
+        if (!mid || seenMatchIds.has(mid)) return false
+        seenMatchIds.add(mid)
+        return true
+      })
+      const resultCount = uniqueResults.length
+      const userCorrectCount = uniqueResults.filter(
         (r: { text: string }) => r.text.includes("— CORRECT")
       ).length
 

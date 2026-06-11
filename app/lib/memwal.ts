@@ -8,7 +8,7 @@ export function getMemWal(): MemWal {
       key: process.env.MEMWAL_PRIVATE_KEY!,
       accountId: process.env.MEMWAL_ACCOUNT_ID!,
       serverUrl: process.env.MEMWAL_SERVER_URL!,
-      namespace: "var-wc2026",
+      namespace: "var-wc2026-v2",
     });
   }
   return instance;
@@ -20,9 +20,11 @@ export function getMemWal(): MemWal {
 // bursting past the limit (429). This collapses them into ONE recall per user
 // per TTL window. All endpoints filter the returned list locally.
 
-type CachedRecall = { mems: string[]; ts: number };
+/** A recalled memory paired with its Walrus blob_id (for on-chain proof links). */
+export type RecalledMem = { text: string; blob_id: string };
+type CachedRecall = { mems: RecalledMem[]; ts: number };
 const userRecallCache = new Map<string, CachedRecall>();
-const inFlightRecall = new Map<string, Promise<string[]>>();
+const inFlightRecall = new Map<string, Promise<RecalledMem[]>>();
 const USER_RECALL_TTL = 45_000; // 45s — under the 60s rate-limit window
 
 // Durable per-process index of which matches a user has predicted. Grows only
@@ -31,10 +33,10 @@ const USER_RECALL_TTL = 45_000; // 45s — under the 60s rate-limit window
 // recall after a server restart.
 const predictedIndex = new Map<string, Set<string>>();
 
-function indexPredictionsFrom(userId: string, mems: string[]): void {
+function indexPredictionsFrom(userId: string, mems: RecalledMem[]): void {
   let set = predictedIndex.get(userId);
   if (!set) { set = new Set(); predictedIndex.set(userId, set); }
-  for (const t of mems) {
+  for (const { text: t } of mems) {
     if (!t.startsWith("[PREDICTION]") || !t.includes(userId)) continue;
     const m = t.match(/\(matchId: ([\w_]+)\)/);
     if (m) set.add(m[1]);
@@ -54,12 +56,13 @@ export function markPredictedMatch(userId: string, matchId: string): void {
 }
 
 /**
- * Recall all memory text for a user, shared across endpoints with a 45s cache
- * and in-flight coalescing (concurrent callers share one Walrus request).
- * On a recall failure (e.g. 429), serves the last cached value if available;
- * only throws when there is nothing cached to fall back on.
+ * Recall all memories for a user as `{ text, blob_id }` pairs — shared across
+ * endpoints with a 45s cache and in-flight coalescing (concurrent callers share
+ * one Walrus request). The blob_id is the real Walrus blob the record lives in,
+ * used to render on-chain proof links. On a recall failure (e.g. 429), serves
+ * the last cached value if available; only throws when nothing is cached.
  */
-export async function recallUserMemories(userId: string): Promise<string[]> {
+export async function recallUserMemoriesDetailed(userId: string): Promise<RecalledMem[]> {
   const now = Date.now();
   const cached = userRecallCache.get(userId);
   if (cached && now - cached.ts < USER_RECALL_TTL) return cached.mems;
@@ -75,9 +78,9 @@ export async function recallUserMemories(userId: string): Promise<string[]> {
         query: `User ${userId} predictions results forecast streak confidence`,
         limit: 200, // default is 10 — far too low for a user's full history; counts/dedup need the complete set
       });
-      const mems = (res.results ?? [])
-        .map((m: { text: string }) => m.text)
-        .filter((t: string) => t.includes(userId));
+      const mems: RecalledMem[] = (res.results ?? [])
+        .filter((m: { text: string }) => m.text.includes(userId))
+        .map((m: { text: string; blob_id?: string }) => ({ text: m.text, blob_id: m.blob_id ?? "" }));
       userRecallCache.set(userId, { mems, ts: Date.now() });
       indexPredictionsFrom(userId, mems); // keep the durable predicted-match index fresh
       return mems;
@@ -92,6 +95,15 @@ export async function recallUserMemories(userId: string): Promise<string[]> {
   return promise;
 }
 
+/**
+ * Text-only recall — backward-compatible `string[]` used by every read endpoint
+ * that only needs the memory text (counts, dedup, roast context). Shares the same
+ * single cached recall as `recallUserMemoriesDetailed` (no extra Walrus request).
+ */
+export async function recallUserMemories(userId: string): Promise<string[]> {
+  return (await recallUserMemoriesDetailed(userId)).map(m => m.text);
+}
+
 /** Drop the cache for a user (call after writing a new memory for them). */
 export function invalidateUserMemories(userId: string): void {
   userRecallCache.delete(userId);
@@ -101,7 +113,7 @@ export function invalidateUserMemories(userId: string): void {
  * Append a freshly-written memory to the cached list (if present) so the next
  * read sees it without forcing another Walrus recall. Use after a remember().
  */
-export function appendUserMemory(userId: string, text: string): void {
+export function appendUserMemory(userId: string, text: string, blobId = ""): void {
   const c = userRecallCache.get(userId);
-  if (c) c.mems = [...c.mems, text];
+  if (c) c.mems = [...c.mems, { text, blob_id: blobId }];
 }

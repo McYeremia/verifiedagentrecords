@@ -8,13 +8,13 @@ import { matches as allMatches, getTLA } from "../lib/matches"
 import FlagImg from "../components/FlagImg"
 
 // Derive all 48 unique teams from the fixture list — stays in sync with matches.ts
-const teamMap = new Map<string, string>()
+const teamNames = new Set<string>()
 for (const m of allMatches) {
-  if (!teamMap.has(m.homeTeam)) teamMap.set(m.homeTeam, m.homeFlag)
-  if (!teamMap.has(m.awayTeam)) teamMap.set(m.awayTeam, m.awayFlag)
+  teamNames.add(m.homeTeam)
+  teamNames.add(m.awayTeam)
 }
-const TEAMS = [...teamMap.entries()]
-  .map(([name, flag]) => ({ name, flag }))
+const TEAMS = [...teamNames]
+  .map(name => ({ name }))
   .sort((a, b) => a.name.localeCompare(b.name))
 
 export default function ChampionDashboard() {

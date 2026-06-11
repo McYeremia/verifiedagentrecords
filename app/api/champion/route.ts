@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getMemWal } from "../../lib/memwal"
+import { getMemWal, recallUserMemories, appendUserMemory } from "../../lib/memwal"
 
 // The original locked pick = earliest "Locked in" timestamp (recall is ordered
 // by relevance, not time, so position can't be trusted).
@@ -17,14 +17,13 @@ export async function GET(req: NextRequest) {
     const userId = searchParams.get("userId")
     if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 })
 
-    const mem = getMemWal()
-    const result = await mem.recall({
-      query: `CHAMPION_PICK User ${userId} World Cup 2026 predicts win`,
-    })
-
-    const picks = (result.results || [])
-      .map((m: { text: string }) => m.text)
-      .filter((t: string) => t.startsWith("[CHAMPION_PICK]") && t.includes(userId))
+    // Shared 45s cache — reuses the same recall as /api/bootstrap and /api/profile
+    // so a /champion load on a page where the user already visited /predict costs 0
+    // extra Walrus requests.
+    const memories = await recallUserMemories(userId)
+    const picks = memories.filter(
+      (t: string) => t.startsWith("[CHAMPION_PICK]") && t.includes(userId)
+    )
 
     if (picks.length === 0) {
       return NextResponse.json({ pick: null })
@@ -41,9 +40,9 @@ export async function GET(req: NextRequest) {
       pick: teamMatch?.[1] ?? null,
       lockedAt: timeMatch?.[1] ?? null,
     })
-  } catch (error) {
-    console.error("Error getting champion pick:", error)
-    return NextResponse.json({ error: "Failed to get champion pick" }, { status: 500 })
+  } catch {
+    // Graceful degradation — no 500 if recall fails under rate limit
+    return NextResponse.json({ pick: null })
   }
 }
 
@@ -61,12 +60,10 @@ export async function POST(req: NextRequest) {
     // reconcile. On a recall failure we fall through and write rather than
     // block the user (better a rare duplicate than a lost pick).
     try {
-      const existing = await mem.recall({
-        query: `CHAMPION_PICK User ${userId} World Cup 2026 predicts win`,
-      })
-      const priorPicks = (existing.results || [])
-        .map((m: { text: string }) => m.text)
-        .filter((t: string) => t.startsWith("[CHAMPION_PICK]") && t.includes(userId))
+      const existing = await recallUserMemories(userId)
+      const priorPicks = existing.filter(
+        (t: string) => t.startsWith("[CHAMPION_PICK]") && t.includes(userId)
+      )
       if (priorPicks.length > 0) {
         const original = pickEarliest(priorPicks)
         return NextResponse.json(
@@ -86,6 +83,7 @@ export async function POST(req: NextRequest) {
     const memoryText = `[CHAMPION_PICK] User ${userId} predicts ${team} will win World Cup 2026. Locked in: ${new Date().toISOString()}`
     const job = await mem.remember(memoryText)
     await mem.waitForRememberJob(job.job_id)
+    appendUserMemory(userId, memoryText) // keep shared recall cache fresh
 
     return NextResponse.json({ success: true, pick: team })
   } catch (error) {

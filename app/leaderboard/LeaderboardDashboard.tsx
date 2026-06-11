@@ -17,19 +17,23 @@ type LeaderboardEntry = {
   predictions: number
   correct: number
   accuracy: number
+  updatedAt: string
 }
 
 function parseLeaderboardEntry(text: string): LeaderboardEntry | null {
+  if (!text.startsWith("[LEADERBOARD]")) return null
   const userMatch = text.match(/User (0x[a-fA-F0-9]+)/)
   const predMatch = text.match(/(\d+) predictions/)
   const correctMatch = text.match(/(\d+) correct/)
   const accuracyMatch = text.match(/(\d+)% accuracy/)
+  const tsMatch = text.match(/Last updated: (.+)$/)
   if (!userMatch) return null
   return {
     userId: userMatch[1],
     predictions: parseInt(predMatch?.[1] ?? "0"),
     correct: parseInt(correctMatch?.[1] ?? "0"),
     accuracy: parseInt(accuracyMatch?.[1] ?? "0"),
+    updatedAt: tsMatch?.[1]?.trim() ?? "",
   }
 }
 
@@ -58,14 +62,18 @@ export default function LeaderboardDashboard() {
         if (cancelled) return
         const raw: string[] = data.texts || []
         const parsed = raw
+          .filter(t => t.startsWith("[LEADERBOARD]"))
           .map(t => parseLeaderboardEntry(t))
           .filter(Boolean) as LeaderboardEntry[]
 
-        // Deduplicate by userId
+        // Deduplicate by userId — keep the most recent LEADERBOARD entry (by Last updated
+        // timestamp). The latest entry is always the most accurate: it was written last and
+        // reflects the cumulative correct count at that point. "Highest prediction count"
+        // would pick a corrupt entry if the same match was resolved multiple times.
         const uniqueMap = new Map<string, LeaderboardEntry>()
         for (const entry of parsed) {
           const existing = uniqueMap.get(entry.userId)
-          if (!existing || entry.predictions > existing.predictions) {
+          if (!existing || entry.updatedAt > existing.updatedAt) {
             uniqueMap.set(entry.userId, entry)
           }
         }

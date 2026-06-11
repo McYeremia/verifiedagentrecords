@@ -4,17 +4,17 @@ import { getMemWal } from "./memwal"
 
 export type SnapshotTrigger = "PREDICTION" | "RESULT" | "PATTERN"
 
+const groq = createOpenAI({
+  apiKey: process.env.GROQ_API_KEY,
+  baseURL: "https://api.groq.com/openai/v1",
+})
+
 export async function saveRoastSnapshot(
   userId: string,
   trigger: SnapshotTrigger,
   userMemories: string[]
 ): Promise<{ roast: string; snapshot: string } | null> {
   if (userMemories.length === 0) return null
-
-  const groq = createOpenAI({
-    apiKey: process.env.GROQ_API_KEY,
-    baseURL: "https://api.groq.com/openai/v1",
-  })
 
   // Tier flags + counts use the FULL history; only the text sent to Groq is
   // capped at 15 (matching roast-engine) so a larger recall limit never inflates
