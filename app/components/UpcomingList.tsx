@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { getUpcomingMatches, getTLA, matches, isPredictionClosed } from "../lib/matches"
+import { getTLA, matches, isPredictionClosed, getKickoff } from "../lib/matches"
 import FlagImg from "./FlagImg"
 
 interface UpcomingListProps {
@@ -8,150 +8,115 @@ interface UpcomingListProps {
 }
 
 export default function UpcomingList({ skipFirst = true, limit = 3 }: UpcomingListProps) {
-  const all = getUpcomingMatches()
-  const upcoming = skipFirst ? all.slice(1, limit + 1) : all.slice(0, limit)
+  const now = Date.now()
 
-  if (upcoming.length === 0) {
-    // Find the most recently kicked-off matches (past kickoff, no result yet — or any)
-    const recent = matches
-      .filter(m => isPredictionClosed(m))
-      .slice(-5)
-      .reverse()
+  // Sort all 72 fixtures by kickoff ascending, then show a window centred on
+  // "now": up to 2 recently kicked-off matches (Locked) + the rest upcoming.
+  const sorted = [...matches].sort((a, b) => getKickoff(a).getTime() - getKickoff(b).getTime())
 
-    return (
-      <div
-        className="rounded-2xl overflow-hidden backdrop-blur-xl border border-white/10"
-        style={{ background: "rgba(255, 255, 255, 0.03)" }}
-      >
-        <div
-          className="px-4 py-3.5 flex items-center gap-1.5 border-b border-white/5"
-          style={{ background: "rgba(255, 255, 255, 0.02)" }}
-        >
-          <i className="ti ti-check text-[11px] text-neutral-400" />
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
-            Matches in progress
-          </span>
-        </div>
+  // Find the first match whose kickoff is still in the future
+  const firstUpcomingIdx = sorted.findIndex(m => getKickoff(m).getTime() > now)
 
-        {recent.length > 0 ? (
-          <>
-            {recent.map((match, i) => (
-              <div
-                key={match.id}
-                className="flex items-center justify-between px-5 py-3.5 transition-colors duration-200 hover:bg-white/[0.05]"
-                style={{
-                  borderBottom: i < recent.length - 1 ? "0.5px solid rgba(255, 255, 255, 0.05)" : undefined,
-                }}
-              >
-                <div className="flex flex-col gap-0.5 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <FlagImg team={match.homeTeam} height={16} />
-                    <span className="text-[12px] font-bold text-white tracking-wide">{getTLA(match.homeTeam)}</span>
-                    <span className="text-[10px] text-neutral-500">vs</span>
-                    <span className="text-[12px] font-bold text-white tracking-wide">{getTLA(match.awayTeam)}</span>
-                    <FlagImg team={match.awayTeam} height={16} />
-                  </div>
-                  <div className="text-[10px] text-neutral-500 truncate">
-                    {match.homeTeam} vs {match.awayTeam}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3.5 flex-shrink-0">
-                  <span className="text-[12px] hidden sm:block text-neutral-400">{match.date}</span>
-                  <span
-                    className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                    style={{
-                      background: "rgba(239,68,68,0.10)",
-                      color: "#EF4444",
-                      border: "0.5px solid rgba(239,68,68,0.20)",
-                    }}
-                  >
-                    Locked
-                  </span>
-                </div>
-              </div>
-            ))}
-            <div className="px-5 py-3.5 flex justify-center" style={{ borderTop: "0.5px solid rgba(255,255,255,0.05)" }}>
-              <Link
-                href="/predict"
-                className="text-[12px] font-medium transition-opacity hover:opacity-100 flex items-center gap-1.5"
-                style={{ color: "rgba(255,255,255,0.4)" }}
-              >
-                <i className="ti ti-arrow-right" />
-                View all matches &amp; results
-              </Link>
-            </div>
-          </>
-        ) : (
-          <div className="px-5 py-8 text-center">
-            <p className="text-[13px] mb-4" style={{ color: "rgba(255,255,255,0.3)" }}>
-              The tournament is underway — all matches are in progress or completed.
-            </p>
-            <Link
-              href="/predict"
-              className="text-[13px] font-medium transition-colors hover:text-white"
-              style={{ color: "#3B82F6" }}
-            >
-              View results &rarr;
-            </Link>
-          </div>
-        )}
-      </div>
-    )
+  // Window start: up to 2 matches before the first upcoming (so recently locked
+  // matches appear at the top of the list)
+  const windowStart = Math.max(0, firstUpcomingIdx === -1 ? sorted.length - limit : firstUpcomingIdx - 2)
+
+  let displayed = sorted.slice(windowStart)
+  if (skipFirst) displayed = displayed.slice(1)
+  displayed = displayed.slice(0, limit)
+
+  // Fallback: if window is empty (all matches over and skipFirst consumed all),
+  // show the last `limit` matches as Locked.
+  if (displayed.length === 0) {
+    displayed = sorted.slice(-limit)
   }
+
+  const hasUpcoming = displayed.some(m => !isPredictionClosed(m))
 
   return (
     <div
-      className="rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-[#3B82F6]/3 backdrop-blur-xl border border-white/10"
-      style={{
-        background: "rgba(255, 255, 255, 0.03)",
-      }}
+      className="rounded-2xl overflow-hidden backdrop-blur-xl border border-white/10"
+      style={{ background: "rgba(255,255,255,0.03)" }}
     >
       {/* Header */}
       <div
         className="px-4 py-3.5 flex items-center gap-1.5 border-b border-white/5"
-        style={{ background: "rgba(255, 255, 255, 0.02)" }}
+        style={{ background: "rgba(255,255,255,0.02)" }}
       >
-        <i className="ti ti-calendar-event text-[11px] text-neutral-400" />
+        <i className={`ti ${hasUpcoming ? "ti-calendar-event" : "ti-check"} text-[11px] text-neutral-400`} />
         <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
-          Upcoming matches
+          {hasUpcoming ? "Upcoming matches" : "Matches in progress"}
         </span>
       </div>
 
-      {/* Items */}
-      {upcoming.map((match, i) => (
-        <div
-          key={match.id}
-          className="flex items-center justify-between px-5 py-3.5 transition-colors duration-200 hover:bg-white/[0.05]"
-          style={{
-            borderBottom: i < upcoming.length - 1 ? "0.5px solid rgba(255, 255, 255, 0.05)" : undefined,
-          }}
+      {/* Rows */}
+      {displayed.map((match, i) => {
+        const locked = isPredictionClosed(match)
+        return (
+          <div
+            key={match.id}
+            className="flex items-center justify-between px-5 py-3.5 transition-colors duration-200 hover:bg-white/[0.05]"
+            style={{
+              borderBottom: i < displayed.length - 1 ? "0.5px solid rgba(255,255,255,0.05)" : undefined,
+              opacity: locked ? 0.72 : 1,
+            }}
+          >
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <FlagImg team={match.homeTeam} height={16} />
+                <span className="text-[12px] font-bold text-white tracking-wide">{getTLA(match.homeTeam)}</span>
+                <span className="text-[10px] text-neutral-500">vs</span>
+                <span className="text-[12px] font-bold text-white tracking-wide">{getTLA(match.awayTeam)}</span>
+                <FlagImg team={match.awayTeam} height={16} />
+              </div>
+              <div className="text-[10px] text-neutral-500 truncate">
+                {match.homeTeam} vs {match.awayTeam}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3.5 flex-shrink-0">
+              <span className="text-[12px] hidden sm:block text-neutral-400">
+                {match.date} · {match.time}
+              </span>
+              {locked ? (
+                <span
+                  className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                  style={{
+                    background: "rgba(239,68,68,0.10)",
+                    color: "#EF4444",
+                    border: "0.5px solid rgba(239,68,68,0.20)",
+                  }}
+                >
+                  Locked
+                </span>
+              ) : (
+                <Link
+                  href={`/predict?match=${match.id}`}
+                  className="text-[12px] font-semibold transition-colors duration-200 hover:text-white"
+                  style={{ color: "#3B82F6" }}
+                >
+                  Predict
+                </Link>
+              )}
+            </div>
+          </div>
+        )
+      })}
+
+      {/* Footer link */}
+      <div
+        className="px-5 py-3.5 flex justify-center"
+        style={{ borderTop: "0.5px solid rgba(255,255,255,0.05)" }}
+      >
+        <Link
+          href="/predict"
+          className="text-[12px] font-medium transition-opacity hover:opacity-100 flex items-center gap-1.5"
+          style={{ color: "rgba(255,255,255,0.4)" }}
         >
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <FlagImg team={match.homeTeam} height={16} />
-              <span className="text-[12px] font-bold text-white tracking-wide">{getTLA(match.homeTeam)}</span>
-              <span className="text-[10px] text-neutral-500">vs</span>
-              <span className="text-[12px] font-bold text-white tracking-wide">{getTLA(match.awayTeam)}</span>
-              <FlagImg team={match.awayTeam} height={16} />
-            </div>
-            <div className="text-[10px] text-neutral-500 truncate">
-              {match.homeTeam} vs {match.awayTeam}
-            </div>
-          </div>
-          <div className="flex items-center gap-3.5 flex-shrink-0">
-            <span className="text-[12px] hidden sm:block text-neutral-400">
-              {match.date}
-            </span>
-            <Link
-              href={`/predict?match=${match.id}`}
-              className="text-[12px] font-semibold transition-colors duration-200 hover:text-white"
-              style={{ color: "#3B82F6" }}
-            >
-              Predict
-            </Link>
-          </div>
-        </div>
-      ))}
+          <i className="ti ti-arrow-right" />
+          View all matches &amp; results
+        </Link>
+      </div>
     </div>
   )
 }
