@@ -366,10 +366,45 @@ export default function Home() {
                     </div>
                   ) : (
                     <div
-                      className="rounded-2xl p-10 text-center"
+                      className="rounded-2xl p-10 flex flex-col items-center gap-6 text-center"
                       style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.06)" }}
                     >
-                      <p style={{ color: "rgba(255,255,255,0.3)" }}>All predictions locked in.</p>
+                      <div
+                        className="flex items-center justify-center rounded-2xl"
+                        style={{ width: 56, height: 56, background: "rgba(59,130,246,0.10)", border: "0.5px solid rgba(59,130,246,0.18)" }}
+                      >
+                        <i className="ti ti-trophy" style={{ fontSize: 26, color: "#3B82F6" }} />
+                      </div>
+                      <div>
+                        <p className="text-[17px] font-semibold text-white mb-2">Tournament underway</p>
+                        <p className="text-[14px] leading-relaxed" style={{ color: "rgba(255,255,255,0.38)" }}>
+                          All prediction windows are closed. Check the leaderboard or view your history.
+                        </p>
+                      </div>
+                      <div className="flex gap-3 flex-wrap justify-center">
+                        <Link
+                          href="/leaderboard"
+                          className="inline-flex items-center gap-2 text-white text-[13px] font-medium transition-all active:scale-[0.97] hover:opacity-90"
+                          style={{ background: "#3B82F6", padding: "10px 22px", borderRadius: 99 }}
+                        >
+                          <i className="ti ti-trophy" />
+                          Leaderboard
+                        </Link>
+                        <Link
+                          href="/predict"
+                          className="inline-flex items-center gap-2 text-[13px] font-medium transition-all active:scale-[0.97]"
+                          style={{
+                            background: "rgba(255,255,255,0.05)",
+                            color: "rgba(255,255,255,0.6)",
+                            border: "0.5px solid rgba(255,255,255,0.1)",
+                            padding: "10px 22px",
+                            borderRadius: 99,
+                          }}
+                        >
+                          <i className="ti ti-list" />
+                          View Matches
+                        </Link>
+                      </div>
                     </div>
                   )}
                 </div>

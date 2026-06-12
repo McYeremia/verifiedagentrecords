@@ -7,6 +7,7 @@ import Link from "next/link"
 import Navbar from "../components/Navbar"
 import PageBg from "../components/PageBg"
 import RoastCard from "../components/RoastCard"
+import { getMatchById, isPredictionClosed } from "../lib/matches"
 
 function truncateAddress(addr: string) {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
@@ -159,6 +160,30 @@ function buildTimeline(
 }
 
 function computeStats(memories: string[]) {
+  // Prefer the [LEADERBOARD] record — written by resolve, same source as the leaderboard page.
+  const lbTexts = memories
+    .filter(t => t.startsWith("[LEADERBOARD]"))
+    .sort((a, b) => {
+      const tsA = a.match(/Last updated: (.+)/)?.[1] ?? ""
+      const tsB = b.match(/Last updated: (.+)/)?.[1] ?? ""
+      return tsB.localeCompare(tsA)
+    })
+
+  if (lbTexts.length > 0) {
+    const latest   = lbTexts[0]
+    const totalM   = latest.match(/(\d+) predictions/)
+    const correctM = latest.match(/(\d+) correct/)
+    const pctM     = latest.match(/(\d+)% accuracy/)
+    if (totalM && correctM && pctM) {
+      return {
+        total:    parseInt(totalM[1]),
+        correct:  parseInt(correctM[1]),
+        accuracy: parseInt(pctM[1]),
+      }
+    }
+  }
+
+  // Fallback: count from [RESULT] records (no leaderboard record yet — first prediction not resolved)
   const resultMap: Record<string, boolean> = {}
   for (const text of memories) {
     if (!text.startsWith("[RESULT]")) continue
@@ -505,6 +530,9 @@ export default function HistoryDashboard() {
   const [roastTs, setRoastTs]           = useState<number | null>(null)
   const [loading, setLoading]           = useState(false)
   const [snapshotsLoading, setSnapshotsLoading] = useState(false)
+  const [syncing, setSyncing]           = useState(false)
+  const [refreshKey, setRefreshKey]     = useState(0)
+  const autoSyncAttempted               = useRef(false)
   const [calibration, setCalibration]   = useState<{
     buckets: { level: string; label: string; total: number; correct: number; accuracy: number }[]
     resolvedCount: number
@@ -566,6 +594,38 @@ export default function HistoryDashboard() {
       .then(d => { if (d.roast) setRoast(d.roast) })
       .catch(() => {})
   }, [userId, memories, snapshots])
+
+  // Auto-sync: when user has predictions for finished matches with no [RESULT] yet,
+  // trigger /api/matches/sync in the background and refetch after Walrus indexes.
+  useEffect(() => {
+    if (!userId || memories.length === 0 || autoSyncAttempted.current) return
+
+    const pendingMatchIds = memories
+      .filter(m => m.startsWith("[PREDICTION]"))
+      .map(m => m.match(/matchId: ([\w_]+)/)?.[1])
+      .filter((mid): mid is string => !!mid)
+      .filter(mid => !memories.some(m => m.startsWith("[RESULT]") && m.includes(`Match ${mid}`)))
+
+    const hasFinishedUnresolved = pendingMatchIds.some(mid => {
+      const match = getMatchById(mid)
+      return match ? isPredictionClosed(match) : false
+    })
+
+    if (!hasFinishedUnresolved) return
+
+    autoSyncAttempted.current = true
+    setSyncing(true)
+
+    fetch("/api/matches/sync")
+      .then(() => {
+        // Wait for Walrus indexing (~45s max), then refetch memories
+        setTimeout(() => {
+          setSyncing(false)
+          setRefreshKey(k => k + 1)
+        }, 12_000)
+      })
+      .catch(() => setSyncing(false))
+  }, [userId, memories])
 
   useEffect(() => {
     if (!userId) return
@@ -634,7 +694,7 @@ export default function HistoryDashboard() {
       .finally(() => { if (!cancelled) { setLoading(false); setSnapshotsLoading(false) } })
 
     return () => { cancelled = true }
-  }, [userId])
+  }, [userId, refreshKey])
 
   if (!userId) {
     return (
@@ -860,6 +920,19 @@ export default function HistoryDashboard() {
                       </p>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Auto-sync indicator */}
+              {syncing && (
+                <div
+                  className="flex items-center gap-2.5 px-4 py-3 rounded-xl"
+                  style={{ background: "rgba(59,130,246,0.07)", border: "0.5px solid rgba(59,130,246,0.18)" }}
+                >
+                  <i className="ti ti-loader animate-slow-spin flex-shrink-0" style={{ fontSize: 13, color: "#3B82F6" }} />
+                  <span className="text-[12px]" style={{ color: "rgba(255,255,255,0.50)" }}>
+                    VAR is checking match results — updating your record...
+                  </span>
                 </div>
               )}
 

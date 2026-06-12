@@ -108,11 +108,6 @@ export const matches: Match[] = [
   { id: "match_537414", apiId: 537414, homeTeam: "Croatia", awayTeam: "Ghana", date: "2026-06-28", time: "11:00 WIB", group: "Group L", venue: "MetLife Stadium", result: null },
 ]
 
-export const getUpcomingMatches = () => {
-  const today = new Date().toISOString().split("T")[0]
-  return matches.filter(m => m.date >= today && m.result === null)
-}
-
 export const getCompletedMatches = () => matches.filter(m => m.result !== null)
 export const getMatchById = (id: string) => matches.find(m => m.id === id) ?? null
 export const getMatchByApiId = (apiId: number) => matches.find(m => m.apiId === apiId) ?? null
@@ -128,6 +123,11 @@ export const getKickoff = (match: Match): Date => {
 export const isPredictionClosed = (match: Match): boolean => {
   const k = getKickoff(match).getTime()
   return Number.isFinite(k) && Date.now() >= k
+}
+
+// Only matches whose prediction window is still open (before kickoff).
+export const getUpcomingMatches = () => {
+  return matches.filter(m => !isPredictionClosed(m) && m.result === null)
 }
 
 export const FLAG_CODE: Record<string, string> = {
