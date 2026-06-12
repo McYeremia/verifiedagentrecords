@@ -41,11 +41,12 @@ export async function GET() {
       const match = getMatchByApiId(apiMatch.id)
       if (!match) continue
 
-      const homeShort = apiMatch.homeTeam.shortName ?? apiMatch.homeTeam.name
-      const awayShort = apiMatch.awayTeam.shortName ?? apiMatch.awayTeam.name
+      // Use internal team names (match.homeTeam/awayTeam) so the winner string
+      // matches what users stored in their [PREDICTION] records. The football-data
+      // API may return "Korea Republic" while our system uses "South Korea".
       const actualWinner =
-        apiMatch.score.winner === "HOME_TEAM" ? homeShort
-        : apiMatch.score.winner === "AWAY_TEAM" ? awayShort
+        apiMatch.score.winner === "HOME_TEAM" ? match.homeTeam
+        : apiMatch.score.winner === "AWAY_TEAM" ? match.awayTeam
         : apiMatch.score.winner === "DRAW" ? "Draw"
         : null
 

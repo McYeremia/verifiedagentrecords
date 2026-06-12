@@ -96,12 +96,19 @@ function buildTimeline(
     })
     .filter(Boolean) as PredictionItem[]
 
-  // Result items — separate bubble per resolved match (deduplicated by matchId)
+  // Result items — deduplicated by matchId, latest timestamp wins so a
+  // force-corrected result overwrites an earlier wrong one.
+  const resultTexts = memories
+    .filter(t => t.startsWith("[RESULT]"))
+    .sort((a, b) => {
+      const tsA = a.match(/Timestamp: (.+)$/)?.[1] ?? ""
+      const tsB = b.match(/Timestamp: (.+)$/)?.[1] ?? ""
+      return tsB.localeCompare(tsA)
+    })
   const seenResultIds = new Set<string>()
   const resultItems: ResultItem[] = []
-  for (const text of memories) {
-    if (!text.startsWith("[RESULT]")) continue
-    const midM     = text.match(/Match ([\w_]+)/)
+  for (const text of resultTexts) {
+    const midM = text.match(/Match ([\w_]+)/)
     if (!midM || seenResultIds.has(midM[1])) continue
     seenResultIds.add(midM[1])
     const matchNameM  = text.match(/Match [\w_]+ \((.+?)\) ended/)

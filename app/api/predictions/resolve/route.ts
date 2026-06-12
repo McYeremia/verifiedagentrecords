@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { matchId, actualWinner, homeScore, awayScore } = body
+    const { matchId, actualWinner, homeScore, awayScore, force } = body
 
     if (!matchId || !actualWinner || homeScore === undefined || awayScore === undefined) {
       return NextResponse.json(
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
           r.text.startsWith("[LEADERBOARD]") &&
           r.text.includes(`User ${userId}`)
       )
-      if (hasResult && hasLeaderboard) continue // fully processed — skip
+      if (!force && hasResult && hasLeaderboard) continue // fully processed — skip (use force:true to correct a wrong result)
 
       // Only write [RESULT] if it doesn't already exist
       if (!hasResult) {
