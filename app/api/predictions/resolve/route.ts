@@ -142,8 +142,20 @@ export async function POST(req: NextRequest) {
       }
 
       // Update leaderboard entry for this user
+      // Count total predictions made (all matches, not just resolved) for the leaderboard display
+      const allPredRecall = await mem.recall({
+        query: `PREDICTION User ${userId} matchId predicted`,
+        limit: 200,
+      })
+      const totalPredCount = new Set(
+        (allPredRecall.results ?? [])
+          .filter((r: { text: string }) => r.text.startsWith("[PREDICTION]") && r.text.includes(userId))
+          .map((r: { text: string }) => r.text.match(/matchId: ([\w_]+)/)?.[1])
+          .filter(Boolean)
+      ).size || resultCount // fallback to resultCount if recall returns nothing
+
       const lbAccuracy = resultCount > 0 ? Math.round((userCorrectCount / resultCount) * 100) : 0
-      const leaderboardText = `[LEADERBOARD] User ${userId}: ${resultCount} predictions, ${userCorrectCount} correct, ${lbAccuracy}% accuracy. Last updated: ${new Date().toISOString()}`
+      const leaderboardText = `[LEADERBOARD] User ${userId}: ${totalPredCount} predictions, ${resultCount} resolved, ${userCorrectCount} correct, ${lbAccuracy}% accuracy. Last updated: ${new Date().toISOString()}`
       await rememberSafely(leaderboardText)
 
       // Write [STREAK] — track consecutive wins/losses

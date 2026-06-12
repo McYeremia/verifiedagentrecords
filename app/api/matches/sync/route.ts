@@ -123,8 +123,20 @@ export async function GET() {
           await rememberSafely(patternText)
         }
 
+        // Count total predictions made (all matches, not just resolved) for the leaderboard display
+        const allPredRecall = await mem.recall({
+          query: `PREDICTION User ${userId} matchId predicted`,
+          limit: 200,
+        })
+        const totalPredCount = new Set(
+          (allPredRecall.results ?? [])
+            .filter((r: { text: string }) => r.text.startsWith("[PREDICTION]") && r.text.includes(userId))
+            .map((r: { text: string }) => r.text.match(/matchId: ([\w_]+)/)?.[1])
+            .filter(Boolean)
+        ).size || resultCount
+
         const accuracy = resultCount > 0 ? Math.round((correctCount / resultCount) * 100) : 0
-        const lbText = `[LEADERBOARD] User ${userId}: ${resultCount} predictions, ${correctCount} correct, ${accuracy}% accuracy. Last updated: ${new Date().toISOString()}`
+        const lbText = `[LEADERBOARD] User ${userId}: ${totalPredCount} predictions, ${resultCount} resolved, ${correctCount} correct, ${accuracy}% accuracy. Last updated: ${new Date().toISOString()}`
         await rememberSafely(lbText)
 
         // Write [STREAK] — track consecutive wins/losses

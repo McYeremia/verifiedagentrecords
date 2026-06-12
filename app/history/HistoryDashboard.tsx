@@ -160,7 +160,15 @@ function buildTimeline(
 }
 
 function computeStats(memories: string[]) {
-  // Prefer the [LEADERBOARD] record — written by resolve, same source as the leaderboard page.
+  // Total = every prediction the user has ever made, resolved or not
+  const total = new Set(
+    memories
+      .filter(t => t.startsWith("[PREDICTION]"))
+      .map(t => t.match(/matchId: ([\w_]+)/)?.[1])
+      .filter(Boolean)
+  ).size
+
+  // Correct + accuracy: prefer [LEADERBOARD] record (authoritative, written by resolve)
   const lbTexts = memories
     .filter(t => t.startsWith("[LEADERBOARD]"))
     .sort((a, b) => {
@@ -171,19 +179,14 @@ function computeStats(memories: string[]) {
 
   if (lbTexts.length > 0) {
     const latest   = lbTexts[0]
-    const totalM   = latest.match(/(\d+) predictions/)
     const correctM = latest.match(/(\d+) correct/)
     const pctM     = latest.match(/(\d+)% accuracy/)
-    if (totalM && correctM && pctM) {
-      return {
-        total:    parseInt(totalM[1]),
-        correct:  parseInt(correctM[1]),
-        accuracy: parseInt(pctM[1]),
-      }
+    if (correctM && pctM) {
+      return { total, correct: parseInt(correctM[1]), accuracy: parseInt(pctM[1]) }
     }
   }
 
-  // Fallback: count from [RESULT] records (no leaderboard record yet — first prediction not resolved)
+  // Fallback: compute correct/accuracy from [RESULT] records
   const resultMap: Record<string, boolean> = {}
   for (const text of memories) {
     if (!text.startsWith("[RESULT]")) continue
@@ -195,7 +198,7 @@ function computeStats(memories: string[]) {
   const resolved = predIds.filter(id => id in resultMap)
   const correct  = resolved.filter(id => resultMap[id]).length
   return {
-    total:    predIds.length,
+    total,
     correct,
     accuracy: resolved.length > 0 ? Math.round((correct / resolved.length) * 100) : 0,
   }
