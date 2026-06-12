@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getMemWal, invalidateUserMemories } from "../../../lib/memwal"
+import { getMemWal, invalidateUserMemories, recallUserMemories } from "../../../lib/memwal"
 import { getMatchByApiId } from "../../../lib/matches"
 import { saveRoastSnapshot } from "../../../lib/roast-snapshot"
 import { generateWithFallback } from "../../../lib/groq-generate"
@@ -52,17 +52,51 @@ export async function GET() {
       const homeScore: number = apiMatch.score.fullTime.home
       const awayScore: number = apiMatch.score.fullTime.away
 
+      // Strategy 1: generic recall that should match ANY prediction record
       const predRecall = await mem.recall({
-        query: `${match.homeTeam} ${match.awayTeam} predicted win PREDICTION World Cup`,
-        limit: 200, // every user who predicted this match
+        query: "PREDICTION User predicted to win Confidence Timestamp matchId",
+        limit: 200,
       })
 
-      const predTexts: string[] = (predRecall.results ?? [])
+      const debugSample = (predRecall.results ?? []).slice(0, 5).map((r: { text: string }) => ({
+        preview: r.text.slice(0, 100),
+        isPrediction: r.text.startsWith("[PREDICTION]"),
+        hasThisMatch: r.text.includes(`matchId: ${match.id}`),
+      }))
+
+      let predTexts: string[] = (predRecall.results ?? [])
         .map((r: { text: string }) => r.text)
         .filter((t: string) => t.startsWith("[PREDICTION]") && t.includes(`matchId: ${match.id}`))
 
+      // Strategy 2: fallback via all known userIds (leaderboard + broader recall)
       if (predTexts.length === 0) {
-        syncLog.push({ matchId: match.id, usersResolved: 0 })
+        const [lbRecall, broadRecall] = await Promise.all([
+          mem.recall({ query: "LEADERBOARD User predictions accuracy resolved correct", limit: 200 }),
+          mem.recall({ query: `${match.homeTeam} ${match.awayTeam} predicted win`, limit: 200 }),
+        ])
+        const allTexts = [
+          ...(lbRecall.results ?? []).map((r: { text: string }) => r.text),
+          ...(broadRecall.results ?? []).map((r: { text: string }) => r.text),
+        ]
+        const knownUserIds = [...new Set(
+          allTexts
+            .map((t: string) => t.match(/User (0x[a-fA-F0-9]+)/)?.[1])
+            .filter(Boolean) as string[]
+        )]
+
+        for (const uid of knownUserIds) {
+          const userMems = await recallUserMemories(uid)
+          const pred = userMems.find(t =>
+            t.startsWith("[PREDICTION]") &&
+            t.includes(uid) &&
+            t.includes(`matchId: ${match.id}`)
+          )
+          if (pred && !predTexts.includes(pred)) predTexts.push(pred)
+        }
+      }
+
+      if (predTexts.length === 0) {
+        syncLog.push({ matchId: match.id, usersResolved: 0, debug: { strategy1Results: predRecall.results?.length ?? 0, sample: debugSample } })
         continue
       }
 
