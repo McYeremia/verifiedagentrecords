@@ -35,7 +35,7 @@ export async function GET() {
     }
 
     const mem = getMemWal()
-    const syncLog: Array<{ matchId: string; usersResolved: number }> = []
+    const syncLog: Array<{ matchId: string; usersResolved: number; debug?: unknown }> = []
 
     for (const apiMatch of finishedMatches) {
       const match = getMatchByApiId(apiMatch.id)
