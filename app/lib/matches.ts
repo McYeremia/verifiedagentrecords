@@ -125,9 +125,12 @@ export const isPredictionClosed = (match: Match): boolean => {
   return Number.isFinite(k) && Date.now() >= k
 }
 
-// Only matches whose prediction window is still open (before kickoff).
+// Only matches whose prediction window is still open (before kickoff),
+// sorted by kickoff time ascending so the nearest match is always first.
 export const getUpcomingMatches = () => {
-  return matches.filter(m => !isPredictionClosed(m) && m.result === null)
+  return matches
+    .filter(m => !isPredictionClosed(m) && m.result === null)
+    .sort((a, b) => getKickoff(a).getTime() - getKickoff(b).getTime())
 }
 
 export const FLAG_CODE: Record<string, string> = {

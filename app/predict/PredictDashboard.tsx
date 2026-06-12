@@ -19,20 +19,30 @@ function truncateAddress(addr: string) {
 }
 
 function parseMemories(memories: string[]) {
-  const resultMap: Record<string, { isCorrect: boolean; actualWinner: string; score: string }> = {}
-
+  // Dedup [RESULT] by matchId — latest timestamp wins so a force-corrected result
+  // overrides an earlier wrong one for the same match.
+  const resultByMatch = new Map<string, { isCorrect: boolean; actualWinner: string; score: string; ts: string }>()
   for (const text of memories) {
     if (!text.startsWith("[RESULT]")) continue
-    const midM = text.match(/Match ([\w_]+)/)
+    const midM    = text.match(/Match ([\w_]+)/)
     const correctM = text.match(/(CORRECT|WRONG)/)
-    const winnerM = text.match(/ended: (.+?) won (\d+)-(\d+)/)
-    if (midM && correctM && winnerM) {
-      resultMap[midM[1]] = {
+    const winnerM  = text.match(/ended: (.+?) won (\d+)-(\d+)/)
+    const tsM      = text.match(/Timestamp: (.+)$/)
+    if (!midM || !correctM || !winnerM) continue
+    const ts = tsM?.[1]?.trim() ?? ""
+    const existing = resultByMatch.get(midM[1])
+    if (!existing || ts > existing.ts) {
+      resultByMatch.set(midM[1], {
         isCorrect: correctM[1] === "CORRECT",
         actualWinner: winnerM[1],
         score: `${winnerM[2]}-${winnerM[3]}`,
-      }
+        ts,
+      })
     }
+  }
+  const resultMap: Record<string, { isCorrect: boolean; actualWinner: string; score: string }> = {}
+  for (const [mid, v] of resultByMatch) {
+    resultMap[mid] = { isCorrect: v.isCorrect, actualWinner: v.actualWinner, score: v.score }
   }
 
   return memories

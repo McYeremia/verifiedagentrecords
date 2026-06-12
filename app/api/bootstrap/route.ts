@@ -43,6 +43,28 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  // Secondary targeted recall for [RESULT] records — the primary query misses them
+  // due to semantic distance. Without this, the predict sidebar shows all items as
+  // "pending" even when results have been resolved. Non-fatal: degrade gracefully.
+  try {
+    const mem = getMemWal()
+    const resultRecall = await mem.recall({
+      query: `User ${userId} RESULT Match ended predicted CORRECT WRONG`,
+      limit: 200,
+    })
+    const existingTexts = new Set(memories)
+    const newResults = (resultRecall.results ?? [])
+      .filter((r: { text: string }) =>
+        r.text.startsWith("[RESULT]") &&
+        r.text.includes(userId) &&
+        !existingTexts.has(r.text)
+      )
+      .map((r: { text: string }) => r.text)
+    if (newResults.length > 0) memories = [...memories, ...newResults]
+  } catch {
+    // Non-fatal — degrade to primary recall only
+  }
+
   // ── Roast ──
   // A fresh prediction (bust) earns a new Groq verdict. A plain page load /
   // match switch must NOT spend tokens: serve the 30-min cache, else replay the
