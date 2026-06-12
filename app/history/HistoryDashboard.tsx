@@ -621,11 +621,13 @@ export default function HistoryDashboard() {
 
     fetch("/api/matches/sync")
       .then(() => {
-        // Wait for Walrus indexing (~45s max), then refetch memories
+        // First refresh after sync completes — Walrus may still be indexing
         setTimeout(() => {
           setSyncing(false)
           setRefreshKey(k => k + 1)
-        }, 12_000)
+        }, 20_000)
+        // Second silent refresh after Walrus indexing window (~45s)
+        setTimeout(() => setRefreshKey(k => k + 1), 55_000)
       })
       .catch(() => setSyncing(false))
   }, [userId, memories])

@@ -69,9 +69,45 @@ function parseMemories(memories: string[]) {
 }
 
 function computeStats(memories: string[]) {
-  const total = memories.filter(m => m.startsWith("[PREDICTION]")).length
-  const correct = memories.filter(m => m.startsWith("[RESULT]") && m.includes("CORRECT")).length
-  const wrong = memories.filter(m => m.startsWith("[RESULT]") && m.includes("WRONG")).length
+  // Total = unique matchIds predicted (dedup guards against duplicate [PREDICTION] records)
+  const total = new Set(
+    memories
+      .filter(m => m.startsWith("[PREDICTION]"))
+      .map(m => m.match(/matchId: ([\w_]+)/)?.[1])
+      .filter(Boolean)
+  ).size
+
+  // Prefer [LEADERBOARD] for correct count — authoritative, deduped by resolve
+  const lbTexts = memories
+    .filter(t => t.startsWith("[LEADERBOARD]"))
+    .sort((a, b) => {
+      const tsA = a.match(/Last updated: (.+)/)?.[1] ?? ""
+      const tsB = b.match(/Last updated: (.+)/)?.[1] ?? ""
+      return tsB.localeCompare(tsA)
+    })
+  if (lbTexts.length > 0) {
+    const latest   = lbTexts[0]
+    const correctM = latest.match(/(\d+) correct/)
+    const resolvedM = latest.match(/(\d+) resolved/) ?? latest.match(/(\d+) predictions/)
+    if (correctM && resolvedM) {
+      const correct  = parseInt(correctM[1])
+      const resolved = parseInt(resolvedM[1])
+      return { total, correct, wrong: resolved - correct }
+    }
+  }
+
+  // Fallback: deduplicate [RESULT] records by matchId
+  const resultMap: Record<string, boolean> = {}
+  for (const m of memories) {
+    if (!m.startsWith("[RESULT]")) continue
+    const midM    = m.match(/Match ([\w_]+)/)
+    const correctM = m.match(/(CORRECT|WRONG)/)
+    if (midM && correctM && !(midM[1] in resultMap)) {
+      resultMap[midM[1]] = correctM[1] === "CORRECT"
+    }
+  }
+  const correct = Object.values(resultMap).filter(Boolean).length
+  const wrong   = Object.values(resultMap).filter(v => !v).length
   return { total, correct, wrong }
 }
 
