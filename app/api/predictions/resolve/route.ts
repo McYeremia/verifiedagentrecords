@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     const mem = getMemWal()
 
     const predictions = await mem.recall({
-      query: `PREDICTION matchId: ${matchId}`,
+      query: `${match.homeTeam} ${match.awayTeam} predicted win PREDICTION World Cup`,
       limit: 200, // every user who predicted this match — default 10 would leave most unresolved
     })
 
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
       // Check for [LEADERBOARD] too: if RESULT exists but LEADERBOARD is missing (e.g. a
       // prior resolve timed out mid-write), fall through so the leaderboard gets written.
       const existCheck = await mem.recall({
-        query: `RESULT LEADERBOARD Match ${matchId} User ${userId}`,
+        query: `${match.homeTeam} ${match.awayTeam} RESULT LEADERBOARD User ${userId}`,
         limit: 200,
       })
       const hasResult = (existCheck.results ?? []).some(

@@ -53,7 +53,7 @@ export async function GET() {
       const awayScore: number = apiMatch.score.fullTime.away
 
       const predRecall = await mem.recall({
-        query: `PREDICTION matchId: ${match.id} predicted win`,
+        query: `${match.homeTeam} ${match.awayTeam} predicted win PREDICTION World Cup`,
         limit: 200, // every user who predicted this match
       })
 
@@ -79,7 +79,7 @@ export async function GET() {
 
       for (const [userId, predictedWinner] of Object.entries(userPreds)) {
         const existCheck = await mem.recall({
-          query: `RESULT Match ${match.id} User ${userId}`,
+          query: `${match.homeTeam} ${match.awayTeam} RESULT User ${userId} CORRECT WRONG`,
           limit: 200, // dedupe guard — must not miss an existing [RESULT] beyond the top 10
         })
         const alreadyDone = (existCheck.results ?? []).some(
