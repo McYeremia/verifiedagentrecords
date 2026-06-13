@@ -66,6 +66,11 @@ export async function POST(req: NextRequest) {
     const summary: Array<{ userId: string; correct: boolean; patternGenerated: boolean }> = []
 
     for (const userId of resolvedUsers) {
+     // Per-user isolation: a Walrus 429 (the resolve loop makes many weighted
+     // requests) must not abort the whole request. On failure we skip this user
+     // with a 200 partial result; the next resolve/sync run picks them up (dedup
+     // prevents double-processing the ones that succeeded).
+     try {
       const { predictedWinner } = userPredictions[userId]
       const isCorrect = predictedWinner.toLowerCase() === actualWinner.toLowerCase()
 
@@ -73,7 +78,10 @@ export async function POST(req: NextRequest) {
       // Check for [LEADERBOARD] too: if RESULT exists but LEADERBOARD is missing (e.g. a
       // prior resolve timed out mid-write), fall through so the leaderboard gets written.
       const existCheck = await mem.recall({
-        query: `${match.homeTeam} ${match.awayTeam} RESULT LEADERBOARD User ${userId}`,
+        // RESULT-anchored query so the exact prior [RESULT] for this match ranks at the
+        // top despite the relayer's 100-result cap (a team-name-led query got diluted
+        // and missed it, allowing duplicate/contradictory resolutions).
+        query: `RESULT Match ${match.homeTeam} ${match.awayTeam} User ${userId} predicted ended LEADERBOARD`,
         limit: 200,
       })
       const hasResult = (existCheck.results ?? []).some(
@@ -89,8 +97,10 @@ export async function POST(req: NextRequest) {
       )
       if (!force && hasResult && hasLeaderboard) continue // fully processed — skip (use force:true to correct a wrong result)
 
-      // Only write [RESULT] if it doesn't already exist
-      if (!hasResult) {
+      // Write [RESULT] when none exists, OR when force-correcting. The store is
+      // append-only: a forced re-resolve appends a NEWER record, and latest-per-match
+      // wins downstream (history, bias, counts), so it supersedes a wrong earlier one.
+      if (!hasResult || force) {
         const resultText = `[RESULT] Match ${matchId} (${match.homeTeam} vs ${match.awayTeam}) ended: ${actualWinner} won ${homeScore}-${awayScore}. User ${userId} predicted ${predictedWinner} — ${isCorrect ? "CORRECT" : "WRONG"}. Timestamp: ${new Date().toISOString()}`
         await rememberSafely(resultText)
       }
@@ -106,13 +116,19 @@ export async function POST(req: NextRequest) {
       )
       // Deduplicate by matchId — a match resolved multiple times (e.g. during testing)
       // must count as one resolved prediction, not N.
+      // Latest timestamp per matchId wins, so a force-corrected (newer) result
+      // supersedes an earlier wrong one instead of whichever recall surfaced first.
       const seenMatchIds = new Set<string>()
-      const uniqueResults = filteredResults.filter((r: { text: string }) => {
-        const mid = r.text.match(/Match ([\w_]+)/)?.[1]
-        if (!mid || seenMatchIds.has(mid)) return false
-        seenMatchIds.add(mid)
-        return true
-      })
+      const uniqueResults = [...filteredResults]
+        .sort((a: { text: string }, b: { text: string }) =>
+          (b.text.match(/Timestamp: (.+)/)?.[1] ?? "").localeCompare(a.text.match(/Timestamp: (.+)/)?.[1] ?? "")
+        )
+        .filter((r: { text: string }) => {
+          const mid = r.text.match(/Match ([\w_]+)/)?.[1]
+          if (!mid || seenMatchIds.has(mid)) return false
+          seenMatchIds.add(mid)
+          return true
+        })
       const resultCount = uniqueResults.length
       const userCorrectCount = uniqueResults.filter(
         (r: { text: string }) => r.text.includes("— CORRECT")
@@ -121,24 +137,30 @@ export async function POST(req: NextRequest) {
       let patternGenerated = false
 
       if (resultCount > 0 && resultCount % 3 === 0) {
-        const allMemories = await mem.recall({
-          query: `User ${userId} predictions results wins losses`,
-        })
+        // Groq-dependent — best-effort. A 429 (daily quota) must NOT abort the resolve
+        // loop, or remaining users stay unresolved and no snapshot ever writes.
+        try {
+          const allMemories = await mem.recall({
+            query: `User ${userId} predictions results wins losses`,
+          })
 
-        const memoryContext = (allMemories.results || [])
-          .map((m: { text: string }) => m.text)
-          .join("\n")
+          const memoryContext = (allMemories.results || [])
+            .map((m: { text: string }) => m.text)
+            .join("\n")
 
-        const wrongCount = resultCount - userCorrectCount
+          const wrongCount = resultCount - userCorrectCount
 
-        const patternInsight = await generateWithFallback(
-          `Analyze the football prediction patterns of user "${userId}" based on the following track record:\n\n${memoryContext}\n\nWrite 1-2 sentences describing their prediction patterns or biases. Focus on: teams they frequently back, whether they overestimate or underestimate certain teams, accuracy patterns. Use casual English with a slightly sarcastic tone.`
-        )
+          const patternInsight = await generateWithFallback(
+            `Analyze the football prediction patterns of user "${userId}" based on the following track record:\n\n${memoryContext}\n\nWrite 1-2 sentences describing their prediction patterns or biases. Focus on: teams they frequently back, whether they overestimate or underestimate certain teams, accuracy patterns. Use casual English with a slightly sarcastic tone.`
+          )
 
-        const patternText = `[PATTERN] User ${userId} after ${resultCount} predictions: ${userCorrectCount} correct, ${wrongCount} wrong (${Math.round((userCorrectCount / resultCount) * 100)}% accuracy). Pattern analysis: ${patternInsight} Timestamp: ${new Date().toISOString()}`
+          const patternText = `[PATTERN] User ${userId} after ${resultCount} predictions: ${userCorrectCount} correct, ${wrongCount} wrong (${Math.round((userCorrectCount / resultCount) * 100)}% accuracy). Pattern analysis: ${patternInsight} Timestamp: ${new Date().toISOString()}`
 
-        await rememberSafely(patternText)
-        patternGenerated = true
+          await rememberSafely(patternText)
+          patternGenerated = true
+        } catch (e) {
+          console.warn(`Resolve: PATTERN generation failed for ${userId} (Groq?) — skipping, RESULT already saved:`, e)
+        }
       }
 
       // Update leaderboard entry for this user
@@ -183,8 +205,11 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Save roast snapshot — captures how harsh VAR is at this moment in time
-      {
+      // Save roast snapshot — captures how harsh VAR is at this moment in time.
+      // Groq-dependent, best-effort: a 429 must NOT abort the loop. The RESULT/
+      // LEADERBOARD/STREAK above are the critical records; the snapshot is a
+      // replayable nicety (page keeps showing the last good snapshot on failure).
+      try {
         const snapMem = await mem.recall({ query: `User ${userId} predictions results wins losses`, limit: 200 }) // snapshot tier flags need the complete history
         const snapUserMems = (snapMem.results ?? [])
           .filter((r: { text: string }) => r.text.includes(userId))
@@ -192,12 +217,17 @@ export async function POST(req: NextRequest) {
         if (snapUserMems.length > 0) {
           await saveRoastSnapshot(userId, patternGenerated ? "PATTERN" : "RESULT", snapUserMems)
         }
+      } catch (e) {
+        console.warn(`Resolve: snapshot failed for ${userId} (Groq?) — result still resolved:`, e)
       }
 
       summary.push({ userId, correct: isCorrect, patternGenerated })
       // Clear the per-user recall cache so the next page load (history/predict)
       // gets fresh Walrus data instead of the stale pre-resolve snapshot.
       invalidateUserMemories(userId)
+     } catch (e) {
+      console.warn(`Resolve: failed for ${userId} (Walrus 429?) — skipped, self-heals next run:`, e)
+     }
     }
 
     return NextResponse.json({

@@ -77,7 +77,19 @@ export function computeBiasProfile(memories: string[]): BiasProfile {
   const homeBiasPct = decisive > 0 ? Math.round((homePicks / decisive) * 100) : 50
   const drawRatePct = total > 0 ? Math.round((drawPicks / total) * 100) : 0
 
-  const results = memories.filter(m => m.startsWith("[RESULT]"))
+  // Dedup [RESULT] by matchId, keeping the latest timestamp. The store is
+  // append-only, so a force-corrected result (newer) must supersede an earlier
+  // wrong one — and a match resolved twice must count once, not double.
+  const latestResultByMatch = new Map<string, string>()
+  for (const m of memories) {
+    if (!m.startsWith("[RESULT]")) continue
+    const mid = m.match(/Match ([\w_]+)/)?.[1]
+    if (!mid) continue
+    const ts = m.match(/Timestamp: (.+)$/)?.[1] ?? ""
+    const prevTs = latestResultByMatch.get(mid)?.match(/Timestamp: (.+)$/)?.[1] ?? ""
+    if (!latestResultByMatch.has(mid) || ts.localeCompare(prevTs) > 0) latestResultByMatch.set(mid, m)
+  }
+  const results = [...latestResultByMatch.values()]
   const resultCount = results.length
   const correctCount = results.filter(m => m.includes("— CORRECT")).length
   const accuracyPct = resultCount > 0 ? Math.round((correctCount / resultCount) * 100) : 0
@@ -255,13 +267,20 @@ const CONF_LABEL: Record<string, string> = {
 }
 
 export function computeConfidenceCalibration(memories: string[]): Calibration {
+  // Latest [RESULT] per matchId wins (append-only store: a corrected result is
+  // newer and must override the earlier wrong one — don't rely on array order).
   const outcome: Record<string, boolean> = {}
+  const outcomeTs: Record<string, string> = {}
   for (const t of memories) {
     if (!t.startsWith("[RESULT]")) continue
     const midM = t.match(/Match ([\w_]+)/)
     if (!midM) continue
+    const ts = t.match(/Timestamp: (.+)$/)?.[1] ?? ""
+    if (outcomeTs[midM[1]] !== undefined && ts.localeCompare(outcomeTs[midM[1]]) <= 0) continue
     if (t.includes("— CORRECT")) outcome[midM[1]] = true
     else if (t.includes("— WRONG")) outcome[midM[1]] = false
+    else continue
+    outcomeTs[midM[1]] = ts
   }
 
   const acc: Record<string, { total: number; correct: number }> = {}

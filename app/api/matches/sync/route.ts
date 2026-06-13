@@ -113,8 +113,16 @@ export async function GET() {
       let resolved = 0
 
       for (const [userId, predictedWinner] of Object.entries(userPreds)) {
+       // Per-user isolation: a Walrus 429 (this loop makes many weighted requests)
+       // must not abort the whole sync. Skip the failing user and continue; the next
+       // cron run picks them up (the RESULT dedup skips the ones already done).
+       try {
         const existCheck = await mem.recall({
-          query: `${match.homeTeam} ${match.awayTeam} RESULT User ${userId} CORRECT WRONG`,
+          // RESULT-anchored query so the exact prior [RESULT] for this match ranks at
+          // the top — a team-name-led query got diluted and (under the relayer's
+          // 100-result cap) missed the existing record, re-resolving the match with
+          // contradictory data (e.g. Canada stored as both "Bosnia 0-2" and "Draw 1-1").
+          query: `RESULT Match ${match.homeTeam} ${match.awayTeam} User ${userId} predicted ended CORRECT WRONG`,
           limit: 200, // dedupe guard — must not miss an existing [RESULT] beyond the top 10
         })
         const alreadyDone = (existCheck.results ?? []).some(
@@ -135,27 +143,38 @@ export async function GET() {
         const userResultTexts = (userResults.results ?? []).filter(
           (r: { text: string }) => r.text.startsWith("[RESULT]") && r.text.includes(`User ${userId}`)
         )
-        // Deduplicate by matchId — same match resolved multiple times must count as one
+        // Deduplicate by matchId — same match resolved multiple times must count as
+        // one, and the latest timestamp wins so a corrected result supersedes a wrong one.
         const seenMids = new Set<string>()
-        const uniqueResultTexts = userResultTexts.filter((r: { text: string }) => {
-          const mid = r.text.match(/Match ([\w_]+)/)?.[1]
-          if (!mid || seenMids.has(mid)) return false
-          seenMids.add(mid)
-          return true
-        })
+        const uniqueResultTexts = [...userResultTexts]
+          .sort((a: { text: string }, b: { text: string }) =>
+            (b.text.match(/Timestamp: (.+)/)?.[1] ?? "").localeCompare(a.text.match(/Timestamp: (.+)/)?.[1] ?? "")
+          )
+          .filter((r: { text: string }) => {
+            const mid = r.text.match(/Match ([\w_]+)/)?.[1]
+            if (!mid || seenMids.has(mid)) return false
+            seenMids.add(mid)
+            return true
+          })
         const resultCount = uniqueResultTexts.length
         const correctCount = uniqueResultTexts.filter(
           (r: { text: string }) => r.text.includes("— CORRECT")
         ).length
 
         if (resultCount > 0 && resultCount % 3 === 0) {
-          const allMem = await mem.recall({ query: `User ${userId} predictions results wins losses` })
-          const ctx = (allMem.results ?? []).map((m: { text: string }) => m.text).join("\n")
-          const insight = await generateWithFallback(
-            `Analyze the football prediction patterns of user "${userId}":\n\n${ctx}\n\nWrite 1-2 sentences about their prediction bias. Use casual English with a sarcastic tone.`
-          )
-          const patternText = `[PATTERN] User ${userId} after ${resultCount} predictions: ${correctCount} correct, ${resultCount - correctCount} wrong (${Math.round((correctCount / resultCount) * 100)}% accuracy). Pattern analysis: ${insight} Timestamp: ${new Date().toISOString()}`
-          await rememberSafely(patternText)
+          // Groq-dependent — best-effort. A 429 (daily quota) here must NOT abort the
+          // sync loop, or later matches stay unresolved and no snapshot ever writes.
+          try {
+            const allMem = await mem.recall({ query: `User ${userId} predictions results wins losses` })
+            const ctx = (allMem.results ?? []).map((m: { text: string }) => m.text).join("\n")
+            const insight = await generateWithFallback(
+              `Analyze the football prediction patterns of user "${userId}":\n\n${ctx}\n\nWrite 1-2 sentences about their prediction bias. Use casual English with a sarcastic tone.`
+            )
+            const patternText = `[PATTERN] User ${userId} after ${resultCount} predictions: ${correctCount} correct, ${resultCount - correctCount} wrong (${Math.round((correctCount / resultCount) * 100)}% accuracy). Pattern analysis: ${insight} Timestamp: ${new Date().toISOString()}`
+            await rememberSafely(patternText)
+          } catch (e) {
+            console.warn(`Sync: PATTERN generation failed for ${userId} (Groq?) — skipping, RESULT already saved:`, e)
+          }
         }
 
         // Count total predictions made (all matches, not just resolved) for the leaderboard display
@@ -199,8 +218,11 @@ export async function GET() {
           }
         }
 
-        // Save roast snapshot for this user
-        {
+        // Save roast snapshot for this user — Groq-dependent, best-effort.
+        // A 429 must NOT abort the loop: the RESULT/LEADERBOARD/STREAK above are the
+        // critical records; the snapshot is a replayable nicety. On failure the page
+        // keeps showing the last good snapshot (per the zero-Groq replay design).
+        try {
           const snapMem = await mem.recall({ query: `User ${userId} predictions results wins losses`, limit: 200 }) // snapshot tier flags need the complete history
           const snapUserMems = (snapMem.results ?? [])
             .filter((r: { text: string }) => r.text.includes(userId))
@@ -208,10 +230,15 @@ export async function GET() {
           if (snapUserMems.length > 0) {
             await saveRoastSnapshot(userId, "RESULT", snapUserMems)
           }
+        } catch (e) {
+          console.warn(`Sync: snapshot failed for ${userId} (Groq?) — result still resolved:`, e)
         }
 
         invalidateUserMemories(userId)
         resolved++
+       } catch (e) {
+        console.warn(`Sync: failed for ${userId} (Walrus 429?) — skipped, self-heals next run:`, e)
+       }
       }
 
       syncLog.push({ matchId: match.id, usersResolved: resolved })

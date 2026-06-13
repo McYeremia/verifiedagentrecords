@@ -74,13 +74,33 @@ export async function recallUserMemoriesDetailed(userId: string): Promise<Recall
   const promise = (async () => {
     try {
       const mem = getMemWal();
-      const res = await mem.recall({
-        query: `User ${userId} predictions results forecast streak confidence`,
-        limit: 200, // default is 10 — far too low for a user's full history; counts/dedup need the complete set
-      });
-      const mems: RecalledMem[] = (res.results ?? [])
-        .filter((m: { text: string }) => m.text.includes(userId))
-        .map((m: { text: string; blob_id?: string }) => ({ text: m.text, blob_id: m.blob_id ?? "" }));
+      // TWO recalls in parallel, then merge + dedup. The relayer caps recall at
+      // 100 results per call (limit:200 is silently clamped) with no pagination.
+      // Once the shared namespace grows past 100, the generic query below buries a
+      // user's [RESULT] records out of the returned top-100 — they semantically
+      // rank below their PREDICTION/SNAPSHOT/LEADERBOARD records. A dedicated
+      // RESULT-focused recall surfaces them so the shared cache (and therefore
+      // EVERY read endpoint: roast, profile, predict, history) sees the user's
+      // COMPLETE record set. Previously only /api/memories and /api/bootstrap
+      // patched this locally, leaving /api/roast (tier detection) and /api/profile
+      // (accuracy/calibration) silently computing on results-less data.
+      const [generic, resultsFocused] = await Promise.all([
+        mem.recall({
+          query: `User ${userId} predictions results forecast streak confidence`,
+          limit: 200, // default is 10 — far too low for a user's full history; counts/dedup need the complete set
+        }),
+        mem.recall({
+          query: `User ${userId} RESULT Match ended predicted CORRECT WRONG`,
+          limit: 200,
+        }),
+      ]);
+      const seen = new Set<string>();
+      const mems: RecalledMem[] = [];
+      for (const m of [...(generic.results ?? []), ...(resultsFocused.results ?? [])] as { text: string; blob_id?: string }[]) {
+        if (!m.text.includes(userId) || seen.has(m.text)) continue;
+        seen.add(m.text);
+        mems.push({ text: m.text, blob_id: m.blob_id ?? "" });
+      }
       userRecallCache.set(userId, { mems, ts: Date.now() });
       indexPredictionsFrom(userId, mems); // keep the durable predicted-match index fresh
       return mems;
