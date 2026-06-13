@@ -8,6 +8,12 @@ import AnimatedSection from "./components/AnimatedSection"
 import AnimatedCounter from "./components/AnimatedCounter"
 import { getUpcomingMatches } from "./lib/matches"
 
+// ISR: the page is otherwise statically prerendered, so getUpcomingMatches()
+// (which uses Date.now()) would freeze the hero + upcoming list to build time
+// and never advance as kickoffs pass. Regenerate every 5 min so the nearest
+// upcoming match rolls forward automatically without a redeploy.
+export const revalidate = 300
+
 const FEATURES = [
   {
     icon: "lock",
