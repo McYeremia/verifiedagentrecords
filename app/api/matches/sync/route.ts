@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server"
-import { getMemWal, invalidateUserMemories, recallUserMemories } from "../../../lib/memwal"
+import { getMemWal, invalidateUserMemories } from "../../../lib/memwal"
 import { getMatchByApiId } from "../../../lib/matches"
 import { saveRoastSnapshot } from "../../../lib/roast-snapshot"
 import { generateWithFallback } from "../../../lib/groq-generate"
 import { rememberSafely } from "../../../lib/walrus-utils"
+
+// Give the function room: the first successful run after the group stage finished must
+// resolve a backlog of matches (many Walrus writes). Vercel Hobby caps this at 60s.
+export const maxDuration = 60
 
 // 1-minute in-memory cooldown to prevent abuse
 let lastSyncTime = 0
@@ -35,7 +39,28 @@ export async function GET() {
     }
 
     const mem = getMemWal()
-    const syncLog: Array<{ matchId: string; usersResolved: number; debug?: unknown }> = []
+    const syncLog: Array<{ matchId: string; usersResolved: number }> = []
+
+    // ONE bulk recall of all PREDICTION records up front. Previously this recall (plus a
+    // 2-recall "strategy 2" fallback) ran once PER finished match. Now that the entire
+    // group stage is FINISHED, that meant 100+ Walrus recalls per run, and a 429 from any
+    // of the UNGUARDED ones threw straight to the top-level catch → the endpoint returned
+    // 500 every time. Recalling once and filtering in memory removes the 429 storm.
+    let allPredTexts: string[]
+    try {
+      const predRecall = await mem.recall({
+        query: "PREDICTION User predicted to win Confidence Timestamp matchId",
+        limit: 200,
+      })
+      allPredTexts = (predRecall.results ?? [])
+        .map((r: { text: string }) => r.text)
+        .filter((t: string) => t.startsWith("[PREDICTION]"))
+    } catch (e) {
+      // A 429 on the single bulk recall is not fatal — skip this run; the next cron
+      // tick retries and the RESULT dedup makes re-runs idempotent.
+      console.warn("Sync: bulk PREDICTION recall failed (Walrus 429?) — skipping run, self-heals next:", e)
+      return NextResponse.json({ success: true, finishedMatchesChecked: finishedMatches.length, totalUsersResolved: 0, note: "prediction recall unavailable" })
+    }
 
     for (const apiMatch of finishedMatches) {
       const match = getMatchByApiId(apiMatch.id)
@@ -53,53 +78,10 @@ export async function GET() {
       const homeScore: number = apiMatch.score.fullTime.home
       const awayScore: number = apiMatch.score.fullTime.away
 
-      // Strategy 1: generic recall that should match ANY prediction record
-      const predRecall = await mem.recall({
-        query: "PREDICTION User predicted to win Confidence Timestamp matchId",
-        limit: 200,
-      })
-
-      const debugSample = (predRecall.results ?? []).slice(0, 5).map((r: { text: string }) => ({
-        preview: r.text.slice(0, 100),
-        isPrediction: r.text.startsWith("[PREDICTION]"),
-        hasThisMatch: r.text.includes(`matchId: ${match.id}`),
-      }))
-
-      let predTexts: string[] = (predRecall.results ?? [])
-        .map((r: { text: string }) => r.text)
-        .filter((t: string) => t.startsWith("[PREDICTION]") && t.includes(`matchId: ${match.id}`))
-
-      // Strategy 2: fallback via all known userIds (leaderboard + broader recall)
-      if (predTexts.length === 0) {
-        const [lbRecall, broadRecall] = await Promise.all([
-          mem.recall({ query: "LEADERBOARD User predictions accuracy resolved correct", limit: 200 }),
-          mem.recall({ query: `${match.homeTeam} ${match.awayTeam} predicted win`, limit: 200 }),
-        ])
-        const allTexts = [
-          ...(lbRecall.results ?? []).map((r: { text: string }) => r.text),
-          ...(broadRecall.results ?? []).map((r: { text: string }) => r.text),
-        ]
-        const knownUserIds = [...new Set(
-          allTexts
-            .map((t: string) => t.match(/User (0x[a-fA-F0-9]+)/)?.[1])
-            .filter(Boolean) as string[]
-        )]
-
-        for (const uid of knownUserIds) {
-          const userMems = await recallUserMemories(uid)
-          const pred = userMems.find(t =>
-            t.startsWith("[PREDICTION]") &&
-            t.includes(uid) &&
-            t.includes(`matchId: ${match.id}`)
-          )
-          if (pred && !predTexts.includes(pred)) predTexts.push(pred)
-        }
-      }
-
-      if (predTexts.length === 0) {
-        syncLog.push({ matchId: match.id, usersResolved: 0, debug: { strategy1Results: predRecall.results?.length ?? 0, sample: debugSample } })
-        continue
-      }
+      const predTexts: string[] = allPredTexts.filter((t: string) =>
+        t.includes(`matchId: ${match.id}`)
+      )
+      if (predTexts.length === 0) continue
 
       const userPreds: Record<string, string> = {}
       for (const text of predTexts) {
@@ -254,6 +236,6 @@ export async function GET() {
     })
   } catch (error) {
     console.error("Sync error:", error)
-    return NextResponse.json({ error: "Sync failed" }, { status: 500 })
+    return NextResponse.json({ error: "Sync failed", detail: String(error) }, { status: 500 })
   }
 }
