@@ -13,7 +13,15 @@ export const maxDuration = 60
 let lastSyncTime = 0
 const SYNC_COOLDOWN = 60 * 1000
 
+// Stop resolving new results once we are this far into the invocation and return 200
+// with partial progress. The whole group stage finishing at once is a backlog too big
+// to clear in one 60s function (each user-match does several Walrus + Groq calls), so
+// we drain it across cron ticks instead of timing out (504). [RESULT] dedup makes every
+// re-run idempotent, so the next tick picks up exactly where this one stopped.
+const TIME_BUDGET_MS = 45 * 1000
+
 export async function GET() {
+  const startedAt = Date.now()
   if (Date.now() - lastSyncTime < SYNC_COOLDOWN) {
     return NextResponse.json({ message: "Sync cooldown active — try again in a minute", skipped: true })
   }
@@ -21,7 +29,9 @@ export async function GET() {
 
   try {
     const apiRes = await fetch(
-      "https://api.football-data.org/v4/competitions/WC/matches?stage=GROUP_STAGE",
+      // All stages — knockout (round of 32 onward) predictions must resolve too,
+      // not just group-stage ones.
+      "https://api.football-data.org/v4/competitions/WC/matches",
       { headers: { "X-Auth-Token": process.env.FOOTBALL_API_KEY! } }
     )
     if (!apiRes.ok) {
@@ -62,7 +72,9 @@ export async function GET() {
       return NextResponse.json({ success: true, finishedMatchesChecked: finishedMatches.length, totalUsersResolved: 0, note: "prediction recall unavailable" })
     }
 
+    let timedOut = false
     for (const apiMatch of finishedMatches) {
+      if (Date.now() - startedAt > TIME_BUDGET_MS) { timedOut = true; break }
       const match = getMatchByApiId(apiMatch.id)
       if (!match) continue
 
@@ -95,6 +107,7 @@ export async function GET() {
       let resolved = 0
 
       for (const [userId, predictedWinner] of Object.entries(userPreds)) {
+       if (Date.now() - startedAt > TIME_BUDGET_MS) { timedOut = true; break }
        // Per-user isolation: a Walrus 429 (this loop makes many weighted requests)
        // must not abort the whole sync. Skip the failing user and continue; the next
        // cron run picks them up (the RESULT dedup skips the ones already done).
@@ -224,6 +237,7 @@ export async function GET() {
       }
 
       syncLog.push({ matchId: match.id, usersResolved: resolved })
+      if (timedOut) break
     }
 
     const totalResolved = syncLog.reduce((s, l) => s + l.usersResolved, 0)
@@ -232,6 +246,7 @@ export async function GET() {
       success: true,
       finishedMatchesChecked: finishedMatches.length,
       totalUsersResolved: totalResolved,
+      partial: timedOut, // backlog not fully drained this run — next cron tick continues
       log: syncLog,
     })
   } catch (error) {

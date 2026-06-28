@@ -106,6 +106,25 @@ export const matches: Match[] = [
   { id: "match_537412", apiId: 537412, homeTeam: "Panama", awayTeam: "Croatia", date: "2026-06-24", time: "06:00 WIB", group: "Group L", venue: "Rose Bowl", result: null },
   { id: "match_537413", apiId: 537413, homeTeam: "Panama", awayTeam: "England", date: "2026-06-28", time: "04:00 WIB", group: "Group L", venue: "SoFi Stadium", result: null },
   { id: "match_537414", apiId: 537414, homeTeam: "Croatia", awayTeam: "Ghana", date: "2026-06-28", time: "04:00 WIB", group: "Group L", venue: "MetLife Stadium", result: null },
+
+  // ── ROUND OF 32 (LAST_32) ────────────────────────────────────
+  // Teams/times pulled from football-data.org (utcDate +07:00 = WIB). Venues TBD (API null).
+  { id: "match_537417", apiId: 537417, homeTeam: "South Africa", awayTeam: "Canada", date: "2026-06-29", time: "02:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537423", apiId: 537423, homeTeam: "Brazil", awayTeam: "Japan", date: "2026-06-30", time: "00:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537415", apiId: 537415, homeTeam: "Germany", awayTeam: "Paraguay", date: "2026-06-30", time: "03:30 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537418", apiId: 537418, homeTeam: "Netherlands", awayTeam: "Morocco", date: "2026-06-30", time: "08:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537424", apiId: 537424, homeTeam: "Ivory Coast", awayTeam: "Norway", date: "2026-07-01", time: "00:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537416", apiId: 537416, homeTeam: "France", awayTeam: "Sweden", date: "2026-07-01", time: "04:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537425", apiId: 537425, homeTeam: "Mexico", awayTeam: "Ecuador", date: "2026-07-01", time: "08:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537426", apiId: 537426, homeTeam: "England", awayTeam: "Congo DR", date: "2026-07-01", time: "23:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537422", apiId: 537422, homeTeam: "Belgium", awayTeam: "Senegal", date: "2026-07-02", time: "03:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537421", apiId: 537421, homeTeam: "USA", awayTeam: "Bosnia-Herz.", date: "2026-07-02", time: "07:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537420", apiId: 537420, homeTeam: "Spain", awayTeam: "Austria", date: "2026-07-03", time: "02:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537419", apiId: 537419, homeTeam: "Portugal", awayTeam: "Croatia", date: "2026-07-03", time: "06:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537429", apiId: 537429, homeTeam: "Switzerland", awayTeam: "Algeria", date: "2026-07-03", time: "10:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537428", apiId: 537428, homeTeam: "Australia", awayTeam: "Egypt", date: "2026-07-04", time: "01:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537427", apiId: 537427, homeTeam: "Argentina", awayTeam: "Cape Verde", date: "2026-07-04", time: "05:00 WIB", group: "Round of 32", venue: "TBD", result: null },
+  { id: "match_537430", apiId: 537430, homeTeam: "Colombia", awayTeam: "Ghana", date: "2026-07-04", time: "08:30 WIB", group: "Round of 32", venue: "TBD", result: null },
 ]
 
 export const getCompletedMatches = () => matches.filter(m => m.result !== null)

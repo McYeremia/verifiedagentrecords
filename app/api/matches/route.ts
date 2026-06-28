@@ -21,7 +21,9 @@ async function fetchLiveResults() {
 
   try {
     const res = await fetch(
-      "https://api.football-data.org/v4/competitions/WC/matches?stage=GROUP_STAGE",
+      // All stages (group + knockout) — knockout results must flow into the live
+      // ticker and completed lists once the round of 32 starts.
+      "https://api.football-data.org/v4/competitions/WC/matches",
       {
         headers: { "X-Auth-Token": process.env.FOOTBALL_API_KEY! },
         next: { revalidate: 0 },
